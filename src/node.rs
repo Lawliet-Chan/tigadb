@@ -1,19 +1,17 @@
-enum NodeType {
+enum InnerNodeType {
     Node4,
     Node16,
     Node48,
     Node256,
-    Leaf,
 }
 
-impl NodeType {
+impl InnerNodeType {
     fn max(self) -> usize {
         match self {
-            NodeType::Node4 => NODE4MAX,
-            NodeType::Node16 => NODE16MAX,
-            NodeType::Node48 => NODE48MAX,
-            NodeType::Node256 => NODE256MAX,
-            NodeType::Leaf => 0,
+            InnerNodeType::Node4 => NODE4MAX,
+            InnerNodeType::Node16 => NODE16MAX,
+            InnerNodeType::Node48 => NODE48MAX,
+            InnerNodeType::Node256 => NODE256MAX,
         }
     }
 }
@@ -32,20 +30,32 @@ const NODE256MAX: usize = 256;
 
 const PREFIX_LEN: usize = 10;
 
-struct Node {
+struct InnerNode {
     typ: NodeType,
-    key: [char],
+    keys: [char],
     children: [Node],
     prefix: [char],
 }
 
+struct LeafNode {
+    key: [u8],
+    value: [u8],
+}
+
 impl Node {
-    pub fn new(typ: NodeType) -> Box<Node> {
-        Box::from(Node {
+    fn new_inner_node(typ: NodeType) -> Box<InnerNode> {
+        Box::from(InnerNode {
             typ,
-            key: [char; typ.max()],
+            keys: [char; typ.max()],
             children: [Node; typ.max()],
             prefix: [char; PREFIX_LEN],
+        })
+    }
+
+    fn new_leaf_node(key: &[u8], value: &[u8]) -> Box<LeafNode> {
+        Box::from(LeafNode {
+            key: *key.to_owned(),
+            value: *value.to_owned(),
         })
     }
 }
