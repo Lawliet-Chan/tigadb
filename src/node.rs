@@ -1,6 +1,7 @@
 use core::arch::x86_64::{
     __m128i, _mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8,
 };
+use std::ops::Deref;
 use std::u32;
 
 const NODE4MIN: usize = 2;
@@ -90,31 +91,31 @@ impl Node {
         }
     }
 
-    fn find_child(&self, k: u8) -> Option<Node> {
+    fn find_child(&self, k: u8) -> Option<&Node> {
         match &self.typ {
             ArtNodeType::Node4 => {
                 for i in 0..self.children_count {
                     if self.keys[i] == k {
-                        return Some(self.children[i]);
+                        return Some(&self.children[i]);
                     }
                 }
                 None
             }
             ArtNodeType::Node16 => unsafe {
                 let key = _mm_set1_epi8(k as i8);
-                let key2 = _mm_loadu_si128(Box::into_raw(self.keys) as *const __m128i);
+                let key2 = _mm_loadu_si128(Box::into_raw(self.keys.clone()) as *const __m128i);
                 let cmp = _mm_cmpeq_epi8(key, key2);
                 let mask = (1 << self.children_count) - 1;
                 let bit_field = _mm_movemask_epi8(cmp) & (mask as i32);
                 if bit_field > 0 {
                     let u32_bit_field = bit_field as u32;
-                    Some(self.children[u32_bit_field.trailing_zeros() as usize])
+                    Some(&self.children[u32_bit_field.trailing_zeros() as usize])
                 } else {
                     None
                 }
             },
-            ArtNodeType::Node48 => Some(self.children[self.keys[k as usize] as usize]),
-            ArtNodeType::Node256 => Some(self.children[k as usize]),
+            ArtNodeType::Node48 => Some(&self.children[self.keys[k as usize] as usize]),
+            ArtNodeType::Node256 => Some(&self.children[k as usize]),
             ArtNodeType::Leaf => None,
         }
     }
