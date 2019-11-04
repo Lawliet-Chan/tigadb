@@ -1,3 +1,8 @@
+#![feature(core_intrinsics)]
+use std::intrinsics::cttz;
+
+use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
+
 const NODE4MIN: usize = 2;
 const NODE4MAX: usize = 4;
 
@@ -33,48 +38,97 @@ enum ArtNodeType {
 
 struct Node<'a> {
     typ: ArtNodeType,
-    key_char: &'a [char],
-    children: &'a [Node],
+    keys: &'a [u8],
+    children: &'a [Node<'a>],
+    children_count: usize,
 }
 
 impl Node {
-    fn new_node4(key_char: [char; 4]) -> Node {
+    fn new_node4(keys: [u8; 4]) -> Node {
         Node {
             typ: ArtNodeType::Node4,
-            key_char: &key_char,
+            keys: &keys,
             children: &[],
+            children_count: 0,
         }
     }
 
-    fn new_node16(key_char: [char; 16]) -> Node {
+    fn new_node16(keys: [u8; 16]) -> Node {
         Node {
             typ: ArtNodeType::Node16,
-            key_char: &key_char,
+            keys: &keys,
             children: &[],
+            children_count: 0,
         }
     }
 
-    fn new_node48(key_char: [char; 256]) -> Node {
+    fn new_node48(keys: [u8; 256]) -> Node {
         Node {
             typ: ArtNodeType::Node48,
-            key_char: &key_char,
+            keys: &keys,
             children: &[],
+            children_count: 0,
         }
     }
 
     fn new_node256() -> Node {
         Node {
             typ: ArtNodeType::Node256,
-            key_char: &[],
+            keys: &[],
             children: &[],
+            children_count: 0,
         }
     }
 
-    fn new_leaf_node(key_char: &[char]) -> Node {
+    fn new_leaf_node(keys: &[u8]) -> Node {
         Node {
             typ: ArtNodeType::Leaf,
-            key_char,
+            keys,
             children: &[],
+            children_count: 0,
+        }
+    }
+
+    fn find_child(&self, k: u8) -> Option<Node> {
+        match &self.typ {
+            ArtNodeType::Node4 => {
+                for i in 0..self.children_count {
+                    if self.keys[i] == k {
+                        Some(self.children[i])
+                    }
+                }
+                None
+            }
+            ArtNodeType::Node16 => unsafe {
+                let key = _mm_set1_epi8(k as i8);
+                let key2 = _mm_loadu_si128(self.keys);
+                let cmp = _mm_cmpeq_epi8(key, key2);
+                let mask = (1 << self.children_count) - 1;
+                let bit_field = _mm_movemask_epi8(cmp) & (mask as i32);
+                if bit_field {
+                    Some(self.children[cttz(bit_field)])
+                }
+            },
+            ArtNodeType::Node48 => Some(self.children[self.keys[k]]),
+            ArtNodeType::Node256 => Some(self.children[k]),
+            ArtNodeType::Leaf => {}
+        }
+    }
+
+    fn add_child(&self) {}
+
+    fn delete_child(&self) {}
+
+    fn grow(&self) {}
+
+    fn is_full(&self) -> bool {
+        let node_size = self.get_size();
+        match &self.typ {
+            ArtNodeType::Node4 => node_size == NODE4MAX,
+            ArtNodeType::Node16 => node_size == NODE16MAX,
+            ArtNodeType::Node48 => node_size == NODE48MAX,
+            ArtNodeType::Node256 => node_size == NODE256MAX,
+            ArtNodeType::Leaf => true,
         }
     }
 
@@ -82,13 +136,7 @@ impl Node {
         self.typ == ArtNodeType::Leaf
     }
 
-    fn add_child(&self) {}
-
-    fn remove_child(&self) {}
-
-    fn find_child(&self, key: &[char]) {}
-
-    fn grow(&self) {}
-
-    fn is_full(&self) -> bool {}
+    fn get_size(&self) -> usize {
+        0
+    }
 }
