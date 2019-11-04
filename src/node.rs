@@ -1,7 +1,5 @@
-#![feature(core_intrinsics)]
-use std::intrinsics::cttz;
-
 use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
+use std::u32;
 
 const NODE4MIN: usize = 2;
 const NODE4MAX: usize = 4;
@@ -106,7 +104,8 @@ impl Node {
                 let mask = (1 << self.children_count) - 1;
                 let bit_field = _mm_movemask_epi8(cmp) & (mask as i32);
                 if bit_field {
-                    Some(self.children[cttz(bit_field)])
+                    let u32_bit_field = bit_field as u32;
+                    Some(self.children[u32_bit_field.trailing_zeros()])
                 }
             },
             ArtNodeType::Node48 => Some(self.children[self.keys[k]]),
