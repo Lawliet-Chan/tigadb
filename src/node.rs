@@ -1,7 +1,4 @@
-use core::arch::x86_64::{
-    __m128i, _mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8,
-};
-use std::ops::Deref;
+use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
 use std::u32;
 
 const NODE4MIN: usize = 2;
@@ -103,7 +100,7 @@ impl Node {
             }
             ArtNodeType::Node16 => unsafe {
                 let key = _mm_set1_epi8(k as i8);
-                let key2 = _mm_loadu_si128(Box::into_raw(self.keys.clone()) as *const __m128i);
+                let key2 = _mm_loadu_si128(self.keys.as_ptr() as *const _);
                 let cmp = _mm_cmpeq_epi8(key, key2);
                 let mask = (1 << self.children_count) - 1;
                 let bit_field = _mm_movemask_epi8(cmp) & (mask as i32);
