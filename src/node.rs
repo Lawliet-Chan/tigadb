@@ -121,7 +121,28 @@ impl Node {
 
     fn delete_child(&self) {}
 
-    fn grow(&self) {}
+    fn grow(&mut self) {
+        match &self.typ {
+            ArtNodeType::Node4 => {
+                let new_node = Node::new_node16(self.keys.concat());
+
+                *self = new_node;
+            }
+            ArtNodeType::Node16 => {
+                let new_node = Node::new_node48(self.keys.concat());
+
+                *self = new_node;
+            }
+            ArtNodeType::Node48 => {
+                let new_node = Node::new_node256();
+
+                *self = new_node;
+            }
+            _ => {}
+        }
+    }
+
+    fn shrink(&self) {}
 
     fn is_full(&self) -> bool {
         let node_size = self.get_size();
