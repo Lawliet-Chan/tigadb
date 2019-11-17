@@ -43,6 +43,7 @@ struct Node {
 }
 
 impl Node {
+    #[inline]
     fn new_node4(keys: [u8; 4]) -> Node {
         Node {
             typ: ArtNodeType::Node4,
@@ -52,6 +53,7 @@ impl Node {
         }
     }
 
+    #[inline]
     fn new_node16(keys: [u8; 16]) -> Node {
         Node {
             typ: ArtNodeType::Node16,
@@ -61,6 +63,7 @@ impl Node {
         }
     }
 
+    #[inline]
     fn new_node48(keys: [u8; 256]) -> Node {
         Node {
             typ: ArtNodeType::Node48,
@@ -70,6 +73,7 @@ impl Node {
         }
     }
 
+    #[inline]
     fn new_node256() -> Node {
         Node {
             typ: ArtNodeType::Node256,
@@ -79,6 +83,7 @@ impl Node {
         }
     }
 
+    #[inline]
     fn new_leaf_node(keys: Box<[u8]>) -> Node {
         Node {
             typ: ArtNodeType::Leaf,
@@ -88,6 +93,7 @@ impl Node {
         }
     }
 
+    #[inline]
     fn find_child(&self, k: u8) -> Option<&Node> {
         match &self.typ {
             ArtNodeType::Node4 => {
@@ -117,10 +123,13 @@ impl Node {
         }
     }
 
+    #[inline]
     fn add_child(&self) {}
 
+    #[inline]
     fn delete_child(&self) {}
 
+    #[inline]
     fn grow(&mut self) {
         match &self.typ {
             ArtNodeType::Node4 => {
@@ -142,8 +151,10 @@ impl Node {
         }
     }
 
-    fn shrink(&self) {}
+    #[inline]
+    fn shrink(&mut self) {}
 
+    #[inline]
     fn is_full(&self) -> bool {
         let node_size = self.get_size();
         match &self.typ {
@@ -155,10 +166,12 @@ impl Node {
         }
     }
 
+    #[inline]
     fn is_leaf(&self) -> bool {
         self.typ == ArtNodeType::Leaf
     }
 
+    #[inline]
     fn get_size(&self) -> usize {
         0
     }
