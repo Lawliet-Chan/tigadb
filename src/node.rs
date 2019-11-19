@@ -1,5 +1,4 @@
 use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
-use std::intrinsics::maxnumf32;
 use std::u32;
 
 const NODE4MIN: usize = 2;
@@ -125,10 +124,50 @@ impl Node {
     }
 
     #[inline]
-    fn add_child(&self) {}
+    fn add_child(&mut self, key: u8, node: Node) {
+        if self.is_full() {
+            self.grow();
+            self.add_child(key, node);
+            return;
+        }
+        let size = self.get_count();
+        match &self.typ {
+            ArtNodeType::Node4 => {
+                let mut idx = 0;
+                for idx in 0..size {
+                    if key < self.keys[idx] {
+                        break;
+                    }
+                }
+
+                for i in size..idx {
+                    if self.keys[i - 1] > key {
+                        self.keys[i] = self.keys[i - 1];
+                        self.children[i] = self.children[i - 1];
+                    }
+                }
+
+                self.keys[idx] = key;
+                self.children[idx] = node;
+                self.incr_count();
+            }
+            ArtNodeType::Node16 => {}
+            ArtNodeType::Node48 => {}
+            ArtNodeType::Node256 => {}
+            ArtNodeType::Leaf => {}
+        }
+    }
 
     #[inline]
-    fn delete_child(&self) {}
+    fn delete_child(&mut self) {
+        match &self.typ {
+            ArtNodeType::Node4 => {}
+            ArtNodeType::Node16 => {}
+            ArtNodeType::Node48 => {}
+            ArtNodeType::Node256 => {}
+            _ => {}
+        }
+    }
 
     #[inline]
     fn grow(&mut self) {
@@ -190,8 +229,13 @@ impl Node {
     }
 
     #[inline]
-    fn get_size(&self) -> usize {
+    fn get_count(&self) -> usize {
         self.children_count
+    }
+
+    #[inline]
+    fn incr_count(&mut self) {
+        self.children_count += 1;
     }
 
     #[inline]
