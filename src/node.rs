@@ -1,4 +1,5 @@
 use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
+use std::intrinsics::maxnumf32;
 use std::u32;
 
 const NODE4MIN: usize = 2;
@@ -152,18 +153,35 @@ impl Node {
     }
 
     #[inline]
-    fn shrink(&mut self) {}
+    fn shrink(&mut self) {
+        match &self.typ {
+            ArtNodeType::Node16 => {
+                let new_node = Node::new_node4(self.keys.concat());
+
+                *self = new_node;
+            }
+            ArtNodeType::Node48 => {
+                let new_node = Node::new_node16(self.keys.concat());
+
+                *self = new_node;
+            }
+            ArtNodeType::Node256 => {
+                let new_node = Node::new_node48(self.keys.concat());
+
+                *self = new_node;
+            }
+            _ => {}
+        }
+    }
 
     #[inline]
     fn is_full(&self) -> bool {
-        let node_size = self.get_size();
-        match &self.typ {
-            ArtNodeType::Node4 => node_size == NODE4MAX,
-            ArtNodeType::Node16 => node_size == NODE16MAX,
-            ArtNodeType::Node48 => node_size == NODE48MAX,
-            ArtNodeType::Node256 => node_size == NODE256MAX,
-            ArtNodeType::Leaf => true,
-        }
+        self.get_size() == self.max_size()
+    }
+
+    #[inline]
+    fn is_less(&self) -> bool {
+        self.get_size() < self.min_size()
     }
 
     #[inline]
@@ -173,6 +191,28 @@ impl Node {
 
     #[inline]
     fn get_size(&self) -> usize {
-        0
+        self.children_count
+    }
+
+    #[inline]
+    fn max_size(&self) -> usize {
+        match &self.typ {
+            ArtNodeType::Node4 => NODE4MAX,
+            ArtNodeType::Node16 => NODE16MAX,
+            ArtNodeType::Node48 => NODE48MAX,
+            ArtNodeType::Node256 => NODE256MAX,
+            _ => {}
+        }
+    }
+
+    #[inline]
+    fn min_size(&self) -> usize {
+        match &self.typ {
+            ArtNodeType::Node4 => NODE4MIN,
+            ArtNodeType::Node16 => NODE16MIN,
+            ArtNodeType::Node48 => NODE48MIN,
+            ArtNodeType::Node256 => NODE256MIN,
+            _ => {}
+        }
     }
 }
