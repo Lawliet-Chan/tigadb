@@ -149,12 +149,23 @@ impl Node {
 
                 self.keys[idx] = key;
                 self.children[idx] = node;
-                self.incr_count();
+                self.children_count += 1;
             }
-            ArtNodeType::Node16 => {}
-            ArtNodeType::Node48 => {}
-            ArtNodeType::Node256 => {}
-            ArtNodeType::Leaf => {}
+            ArtNodeType::Node16 => {
+                self.children[size] = node;
+                self.keys[size] = key;
+                self.children_count += 1;
+            }
+            ArtNodeType::Node48 => {
+                self.children[size - 1] = node;
+                self.keys[key] = size;
+                self.children_count += 1;
+            }
+            ArtNodeType::Node256 => {
+                self.children[key] = node;
+                self.children_count += 1;
+            }
+            _ => {}
         }
     }
 
@@ -231,11 +242,6 @@ impl Node {
     #[inline]
     fn get_count(&self) -> usize {
         self.children_count
-    }
-
-    #[inline]
-    fn incr_count(&mut self) {
-        self.children_count += 1;
     }
 
     #[inline]
