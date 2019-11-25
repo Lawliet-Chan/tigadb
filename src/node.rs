@@ -35,6 +35,7 @@ enum ArtNodeType {
     Leaf,
 }
 
+// TODO: use Vec<Node> instead of Box<Node>
 struct Node {
     typ: ArtNodeType,
     keys: Box<[u8]>,
