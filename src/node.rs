@@ -184,6 +184,10 @@ impl Node {
             ArtNodeType::Node48 => {}
             ArtNodeType::Node256 => {}
         }
+
+        if self.is_less() {
+            self.shrink();
+        }
     }
 
     #[inline]
