@@ -1,4 +1,5 @@
 use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
+use core::slice::SliceIndex;
 use std::u32;
 
 const NODE4MIN: usize = 2;
@@ -157,39 +158,24 @@ impl Node {
 
                 for i in size..idx {
                     if *self.keys.get(i - 1).unwrap() > key {
-                        if let Some(k) = self.keys.get_mut(i) {
-                            *k = *self.keys.get(i - 1).unwrap();
-                        }
-                        if let Some(ch) = self.children.get_mut(i) {
-                            *ch = *self.children.get(i - 1).unwrap();
-                        }
+                        self.set_key(i, *self.keys.get(i - 1).unwrap());
+                        self.set_child(i, *self.children.get(i - 1).unwrap());
                     }
                 }
 
-                if let Some(k) = self.keys.get_mut(idx) {
-                    *k = key;
-                }
-
-                if let Some(ch) = self.children.get_mut(idx) {
-                    *ch = node;
-                }
+                self.set_key(idx, key);
+                self.set_child(idx, node);
             }
             ArtNodeType::Node16 => {
                 self.children.push(node);
                 self.keys.push(key);
             }
             ArtNodeType::Node48 => {
-                if let Some(k) = self.keys.get_mut(key) {
-                    *k = size;
-                }
-                if let Some(ch) = self.children.get_mut(size - 1) {
-                    *ch = node;
-                }
+                self.set_key(key, size as u8);
+                self.set_child(size - 1, node);
             }
             ArtNodeType::Node256 => {
-                if let Some(ch) = self.children.get_mut(key) {
-                    *ch = node;
-                }
+                self.set_child(key, node);
             }
         }
     }
@@ -249,6 +235,26 @@ impl Node {
                 *self = new_node;
             }
             _ => {}
+        }
+    }
+
+    #[inline]
+    fn set_key<I>(&mut self, i: I, key: u8)
+    where
+        I: SliceIndex<Self>,
+    {
+        if let Some(k) = self.keys.get_mut(i) {
+            *k = key;
+        }
+    }
+
+    #[inline]
+    fn set_child<I>(&mut self, i: I, child: Node)
+    where
+        I: SliceIndex<Self>,
+    {
+        if let Some(ch) = self.children.get_mut(i) {
+            *ch = child;
         }
     }
 
