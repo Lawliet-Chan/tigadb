@@ -129,6 +129,7 @@ impl Node {
         }
     }
 
+    #[inline]
     fn find_child_mut(&mut self, k: u8) -> Option<&mut Node> {
         if let Some(idx) = self.index(k) {
             self.children.get_mut(idx)
