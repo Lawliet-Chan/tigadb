@@ -171,6 +171,8 @@ impl Node {
                 self.keys.push(key);
             }
             ArtNodeType::Node48 => {
+                // size as u8 is safe
+                // because the most is 255. When size is 256, it turns grow().
                 self.set_key(key, size as u8);
                 self.set_child(size - 1, node);
             }
