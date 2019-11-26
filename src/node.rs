@@ -92,12 +92,12 @@ impl Node {
     }
 
     #[inline]
-    fn find_child(&self, k: u8) -> Option<&Node> {
+    fn index(&self, k: u8) -> Option<usize> {
         match &self.typ {
             ArtNodeType::Node4 => {
                 for i in 0..self.get_child_size() {
                     if *self.keys.get(i).unwrap() == k {
-                        return self.children.get(i);
+                        return Some(i);
                     }
                 }
                 None
@@ -110,13 +110,30 @@ impl Node {
                 let bit_field = _mm_movemask_epi8(cmp) & (mask as i32);
                 if bit_field > 0 {
                     let u32_bit_field = bit_field as u32;
-                    self.children.get(u32_bit_field.trailing_zeros())
+                    Some(u32_bit_field.trailing_zeros())
                 } else {
                     None
                 }
             },
-            ArtNodeType::Node48 => self.children.get(self.keys.get(k)),
-            ArtNodeType::Node256 => self.children.get(k),
+            ArtNodeType::Node48 => self.keys.get(k),
+            ArtNodeType::Node256 => Some(k as usize),
+        }
+    }
+
+    #[inline]
+    fn find_child(&self, k: u8) -> Option<&Node> {
+        if let Some(idx) = self.index(k) {
+            self.children.get(idx)
+        } else {
+            None
+        }
+    }
+
+    fn find_child_mut(&mut self, k: u8) -> Option<&mut Node> {
+        if let Some(idx) = self.index(k) {
+            self.children.get_mut(idx)
+        } else {
+            None
         }
     }
 
