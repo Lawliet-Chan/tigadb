@@ -44,30 +44,33 @@ struct Leaf {}
 
 impl Node {
     #[inline]
-    fn new_node4(keys: [u8; 4]) -> Node {
+    fn new_node4(keys: Vec<u8>) -> Node {
+        // keys: [u8;4]
         Node {
             typ: ArtNodeType::Node4,
-            keys: keys.to_vec(),
+            keys,
             children: Vec::with_capacity(NODE4MAX),
             leaf: None,
         }
     }
 
     #[inline]
-    fn new_node16(keys: [u8; 16]) -> Node {
+    fn new_node16(keys: Vec<u8>) -> Node {
+        // keys: [u8;16]
         Node {
             typ: ArtNodeType::Node16,
-            keys: keys.to_vec(),
+            keys,
             children: Vec::with_capacity(NODE16MAX),
             leaf: None,
         }
     }
 
     #[inline]
-    fn new_node48(keys: [u8; 256]) -> Node {
+    fn new_node48(keys: Vec<u8>) -> Node {
+        // keys: [u8;256]
         Node {
             typ: ArtNodeType::Node48,
-            keys: keys.to_vec(),
+            keys,
             children: Vec::with_capacity(NODE48MAX),
             leaf: None,
         }
@@ -170,7 +173,6 @@ impl Node {
                     *ch = node;
                 }
             }
-            _ => {}
         }
     }
 
@@ -181,7 +183,6 @@ impl Node {
             ArtNodeType::Node16 => {}
             ArtNodeType::Node48 => {}
             ArtNodeType::Node256 => {}
-            _ => {}
         }
     }
 
@@ -189,12 +190,12 @@ impl Node {
     fn grow(&mut self) {
         match &self.typ {
             ArtNodeType::Node4 => {
-                let new_node = Node::new_node16(self.keys.concat());
+                let new_node = Node::new_node16(self.keys.clone());
 
                 *self = new_node;
             }
             ArtNodeType::Node16 => {
-                let new_node = Node::new_node48(self.keys.concat());
+                let new_node = Node::new_node48(self.keys.clone());
 
                 *self = new_node;
             }
@@ -211,17 +212,17 @@ impl Node {
     fn shrink(&mut self) {
         match &self.typ {
             ArtNodeType::Node16 => {
-                let new_node = Node::new_node4(self.keys.concat());
+                let new_node = Node::new_node4(self.keys.clone());
 
                 *self = new_node;
             }
             ArtNodeType::Node48 => {
-                let new_node = Node::new_node16(self.keys.concat());
+                let new_node = Node::new_node16(self.keys.clone());
 
                 *self = new_node;
             }
             ArtNodeType::Node256 => {
-                let new_node = Node::new_node48(self.keys.concat());
+                let new_node = Node::new_node48(self.keys.clone());
 
                 *self = new_node;
             }
@@ -256,7 +257,6 @@ impl Node {
             ArtNodeType::Node16 => NODE16MAX,
             ArtNodeType::Node48 => NODE48MAX,
             ArtNodeType::Node256 => NODE256MAX,
-            _ => {}
         }
     }
 
@@ -267,7 +267,6 @@ impl Node {
             ArtNodeType::Node16 => NODE16MIN,
             ArtNodeType::Node48 => NODE48MIN,
             ArtNodeType::Node256 => NODE256MIN,
-            _ => {}
         }
     }
 }
