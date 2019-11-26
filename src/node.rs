@@ -31,26 +31,25 @@ enum ArtNodeType {
 
     // children 256
     Node256,
-
-    Leaf,
 }
 
-// TODO: use Vec<Node> instead of Box<Node>
 struct Node {
     typ: ArtNodeType,
-    keys: Box<[u8]>,
-    children: Box<[Node]>,
-    children_count: usize,
+    keys: Vec<u8>,
+    children: Vec<Node>,
+    leaf: Option<Leaf>,
 }
+
+struct Leaf {}
 
 impl Node {
     #[inline]
     fn new_node4(keys: [u8; 4]) -> Node {
         Node {
             typ: ArtNodeType::Node4,
-            keys: Box::from(keys),
-            children: Box::default(),
-            children_count: 0,
+            keys: keys.to_vec(),
+            children: Vec::with_capacity(NODE4MAX),
+            leaf: None,
         }
     }
 
@@ -58,9 +57,9 @@ impl Node {
     fn new_node16(keys: [u8; 16]) -> Node {
         Node {
             typ: ArtNodeType::Node16,
-            keys: Box::from(keys),
-            children: Box::default(),
-            children_count: 0,
+            keys: keys.to_vec(),
+            children: Vec::with_capacity(NODE16MAX),
+            leaf: None,
         }
     }
 
@@ -68,9 +67,9 @@ impl Node {
     fn new_node48(keys: [u8; 256]) -> Node {
         Node {
             typ: ArtNodeType::Node48,
-            keys: Box::from(keys),
-            children: Box::default(),
-            children_count: 0,
+            keys: keys.to_vec(),
+            children: Vec::with_capacity(NODE48MAX),
+            leaf: None,
         }
     }
 
@@ -78,29 +77,24 @@ impl Node {
     fn new_node256() -> Node {
         Node {
             typ: ArtNodeType::Node256,
-            keys: Box::default(),
-            children: Box::default(),
-            children_count: 0,
+            keys: vec![],
+            children: Vec::with_capacity(NODE256MAX),
+            leaf: None,
         }
     }
 
     #[inline]
-    fn new_leaf_node(keys: Box<[u8]>) -> Node {
-        Node {
-            typ: ArtNodeType::Leaf,
-            keys,
-            children: Box::default(),
-            children_count: 0,
-        }
+    fn new_leaf_node() -> Leaf {
+        Leaf {}
     }
 
     #[inline]
     fn find_child(&self, k: u8) -> Option<&Node> {
         match &self.typ {
             ArtNodeType::Node4 => {
-                for i in 0..self.children_count {
-                    if self.keys[i] == k {
-                        return Some(&self.children[i]);
+                for i in 0..self.get_child_size() {
+                    if *self.keys.get(i).unwrap() == k {
+                        return self.children.get(i);
                     }
                 }
                 None
@@ -109,18 +103,17 @@ impl Node {
                 let key = _mm_set1_epi8(k as i8);
                 let key2 = _mm_loadu_si128(self.keys.as_ptr() as *const _);
                 let cmp = _mm_cmpeq_epi8(key, key2);
-                let mask = (1 << self.children_count) - 1;
+                let mask = (1 << self.get_child_size()) - 1;
                 let bit_field = _mm_movemask_epi8(cmp) & (mask as i32);
                 if bit_field > 0 {
                     let u32_bit_field = bit_field as u32;
-                    Some(&self.children[u32_bit_field.trailing_zeros() as usize])
+                    self.children.get(u32_bit_field.trailing_zeros())
                 } else {
                     None
                 }
             },
-            ArtNodeType::Node48 => Some(&self.children[self.keys[k as usize] as usize]),
-            ArtNodeType::Node256 => Some(&self.children[k as usize]),
-            ArtNodeType::Leaf => None,
+            ArtNodeType::Node48 => self.children.get(self.keys.get(k)),
+            ArtNodeType::Node256 => self.children.get(k),
         }
     }
 
@@ -131,40 +124,51 @@ impl Node {
             self.add_child(key, node);
             return;
         }
-        let size = self.get_count();
+        let size = self.get_child_size();
         match &self.typ {
             ArtNodeType::Node4 => {
                 let mut idx = 0;
                 for idx in 0..size {
-                    if key < self.keys[idx] {
+                    if key < self.keys.get(idx) {
                         break;
                     }
                 }
 
                 for i in size..idx {
-                    if self.keys[i - 1] > key {
-                        self.keys[i] = self.keys[i - 1];
-                        self.children[i] = self.children[i - 1];
+                    if *self.keys.get(i - 1).unwrap() > key {
+                        if let Some(k) = self.keys.get_mut(i) {
+                            *k = *self.keys.get(i - 1).unwrap();
+                        }
+                        if let Some(ch) = self.children.get_mut(i) {
+                            *ch = *self.children.get(i - 1).unwrap();
+                        }
                     }
                 }
 
-                self.keys[idx] = key;
-                self.children[idx] = node;
-                self.children_count += 1;
+                if let Some(k) = self.keys.get_mut(idx) {
+                    *k = key;
+                }
+
+                if let Some(ch) = self.children.get_mut(idx) {
+                    *ch = node;
+                }
             }
             ArtNodeType::Node16 => {
-                self.children[size] = node;
-                self.keys[size] = key;
-                self.children_count += 1;
+                self.children.push(node);
+                self.keys.push(key);
             }
             ArtNodeType::Node48 => {
-                self.children[size - 1] = node;
-                self.keys[key] = size;
-                self.children_count += 1;
+                if let Some(k) = self.keys.get_mut(key) {
+                    *k = size;
+                }
+                if let Some(ch) = self.children.get_mut(size - 1) {
+                    *ch = node;
+                }
             }
             ArtNodeType::Node256 => {
-                self.children[key] = node;
-                self.children_count += 1;
+                if let Some(ch) = self.children.get_mut(key) {
+                    *ch = node;
+                }
             }
             _ => {}
         }
@@ -227,22 +231,22 @@ impl Node {
 
     #[inline]
     fn is_full(&self) -> bool {
-        self.get_size() == self.max_size()
+        self.get_child_size() == self.max_size()
     }
 
     #[inline]
     fn is_less(&self) -> bool {
-        self.get_size() < self.min_size()
+        self.get_child_size() < self.min_size()
     }
 
     #[inline]
     fn is_leaf(&self) -> bool {
-        self.typ == ArtNodeType::Leaf
+        self.leaf.is_some()
     }
 
     #[inline]
-    fn get_count(&self) -> usize {
-        self.children_count
+    fn get_child_size(&self) -> usize {
+        self.children.len()
     }
 
     #[inline]
