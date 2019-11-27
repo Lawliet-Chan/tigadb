@@ -41,37 +41,37 @@ struct Node {
     leaf: Option<Leaf>,
 }
 
-struct Leaf {}
+struct Leaf {
+    key: Vec<u8>,
+    value: Vec<u8>,
+}
 
 impl Node {
     #[inline]
-    fn new_node4(keys: Vec<u8>) -> Node {
-        // keys: [u8;4]
+    fn new_node4(keys: [u8; 4]) -> Node {
         Node {
             typ: ArtNodeType::Node4,
-            keys,
+            keys: keys.to_vec(),
             children: Vec::with_capacity(NODE4MAX),
             leaf: None,
         }
     }
 
     #[inline]
-    fn new_node16(keys: Vec<u8>) -> Node {
-        // keys: [u8;16]
+    fn new_node16(keys: [u8; 16]) -> Node {
         Node {
             typ: ArtNodeType::Node16,
-            keys,
+            keys: keys.to_vec(),
             children: Vec::with_capacity(NODE16MAX),
             leaf: None,
         }
     }
 
     #[inline]
-    fn new_node48(keys: Vec<u8>) -> Node {
-        // keys: [u8;256]
+    fn new_node48(keys: [u8; 256]) -> Node {
         Node {
             typ: ArtNodeType::Node48,
-            keys,
+            keys: keys.to_vec(),
             children: Vec::with_capacity(NODE48MAX),
             leaf: None,
         }
@@ -88,8 +88,8 @@ impl Node {
     }
 
     #[inline]
-    fn new_leaf_node() -> Leaf {
-        Leaf {}
+    fn new_leaf_node(key: Vec<u8>, value: Vec<u8>) -> Leaf {
+        Leaf { key, value }
     }
 
     #[inline]
@@ -213,18 +213,38 @@ impl Node {
     fn grow(&mut self) {
         match &self.typ {
             ArtNodeType::Node4 => {
-                let new_node = Node::new_node16(self.keys.clone());
-
+                let mut new_node = Node::new_node16(self.keys.concat());
+                self.children.clone_into(&mut new_node.children);
+                new_node.leaf = self.leaf;
                 *self = new_node;
             }
             ArtNodeType::Node16 => {
-                let new_node = Node::new_node48(self.keys.clone());
-
+                let mut new_node = Node::new_node48(self.keys.concat());
+                let chsize = self.get_child_size();
+                for i in 0..chsize {
+                    if let Some(child) = self.children.get(i) {
+                        let mut idx: usize = 0;
+                        for j in 0..NODE48MAX {
+                            if new_node.children.get(idx).is_some() {
+                                idx += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        new_node.set_child(idx, *child);
+                        new_node.set_key(self.keys.get(i), (idx + 1) as u8);
+                    }
+                }
                 *self = new_node;
             }
             ArtNodeType::Node48 => {
-                let new_node = Node::new_node256();
-
+                let mut new_node = Node::new_node256();
+                let ksize = self.get_keys_size();
+                for i in 0..ksize {
+                    if let Some(child) = self.find_child(i as u8) {
+                        new_node.set_child(i, *child);
+                    }
+                }
                 *self = new_node;
             }
             _ => {}
@@ -235,17 +255,17 @@ impl Node {
     fn shrink(&mut self) {
         match &self.typ {
             ArtNodeType::Node16 => {
-                let new_node = Node::new_node4(self.keys.clone());
+                let mut new_node = Node::new_node4(self.keys.concat());
 
                 *self = new_node;
             }
             ArtNodeType::Node48 => {
-                let new_node = Node::new_node16(self.keys.clone());
+                let mut new_node = Node::new_node16(self.keys.concat());
 
                 *self = new_node;
             }
             ArtNodeType::Node256 => {
-                let new_node = Node::new_node48(self.keys.clone());
+                let mut new_node = Node::new_node48(self.keys.concat());
 
                 *self = new_node;
             }
@@ -291,6 +311,11 @@ impl Node {
     #[inline]
     fn get_child_size(&self) -> usize {
         self.children.len()
+    }
+
+    #[inline]
+    fn get_keys_size(&self) -> usize {
+        self.keys.len()
     }
 
     #[inline]
