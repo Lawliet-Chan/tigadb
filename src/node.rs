@@ -183,16 +183,29 @@ impl Node {
     }
 
     #[inline]
-    fn delete_child(&mut self) {
-        match &self.typ {
-            ArtNodeType::Node4 => {}
-            ArtNodeType::Node16 => {}
-            ArtNodeType::Node48 => {}
-            ArtNodeType::Node256 => {}
-        }
+    fn delete_child(&mut self, key: u8) {
+        if let Some(idx) = self.index(key) {
+            match &self.typ {
+                ArtNodeType::Node4 | ArtNodeType::Node16 => {
+                    self.keys.remove(idx);
+                    self.children.remove(idx);
+                }
+                ArtNodeType::Node48 => {
+                    if self.children.get(idx).is_some() {
+                        self.keys.remove(idx);
+                        self.children.remove(idx);
+                    }
+                }
+                ArtNodeType::Node256 => {
+                    if self.children.get(idx).is_some() {
+                        self.children.remove(idx);
+                    }
+                }
+            }
 
-        if self.is_less() {
-            self.shrink();
+            if self.is_less() {
+                self.shrink();
+            }
         }
     }
 
