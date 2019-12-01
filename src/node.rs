@@ -109,16 +109,22 @@ impl Node {
                 None
             }
             ArtNodeType::Node16 => unsafe {
-                let key = _mm_set1_epi8(k as i8);
-                let key2 = _mm_loadu_si128(self.keys.as_ptr() as *const _);
-                let cmp = _mm_cmpeq_epi8(key, key2);
-                let mask = (1 << self.get_child_size()) - 1;
-                let bit_field = _mm_movemask_epi8(cmp) & (mask as i32);
-                if bit_field > 0 {
-                    let u32_bit_field = bit_field as u32;
-                    Some(u32_bit_field.trailing_zeros())
-                } else {
-                    None
+                #[cfg(all(
+                    any(target_arch = "x86_64", target_arch = "x86"),
+                    target_feature = "sse2"
+                ))]
+                {
+                    let key = _mm_set1_epi8(k as i8);
+                    let key2 = _mm_loadu_si128(self.keys.as_ptr() as *const _);
+                    let cmp = _mm_cmpeq_epi8(key, key2);
+                    let mask = (1 << self.get_child_size()) - 1;
+                    let bit_field = _mm_movemask_epi8(cmp) & (mask as i32);
+                    if bit_field > 0 {
+                        let u32_bit_field = bit_field as u32;
+                        Some(u32_bit_field.trailing_zeros())
+                    } else {
+                        None
+                    }
                 }
             },
             ArtNodeType::Node48 => self.keys.get(k),
