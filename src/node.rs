@@ -1,4 +1,9 @@
+#[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
+
+#[cfg(target_arch = "x86")]
+use core::arch::x86::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
+
 use core::slice::SliceIndex;
 use std::u32;
 
