@@ -108,6 +108,7 @@ impl Node {
                 }
                 None
             }
+
             ArtNodeType::Node16 => unsafe {
                 #[cfg(all(
                     any(target_arch = "x86_64", target_arch = "x86"),
@@ -127,7 +128,9 @@ impl Node {
                     }
                 }
             },
+
             ArtNodeType::Node48 => self.keys.get(k),
+
             ArtNodeType::Node256 => Some(k as usize),
         }
     }
@@ -177,16 +180,19 @@ impl Node {
                 self.set_key(idx, key);
                 self.set_child(idx, node);
             }
+
             ArtNodeType::Node16 => {
                 self.children.push(node);
                 self.keys.push(key);
             }
+
             ArtNodeType::Node48 => {
                 // size as u8 is safe
                 // because the most is 255. When size is 256, it turns grow().
                 self.set_key(key, size as u8);
-                self.set_child(size - 1, node);
+                self.children.push(node);
             }
+
             ArtNodeType::Node256 => {
                 self.set_child(key, node);
             }
@@ -201,12 +207,14 @@ impl Node {
                     self.keys.remove(idx);
                     self.children.remove(idx);
                 }
+
                 ArtNodeType::Node48 => {
                     if self.children.get(idx).is_some() {
                         self.keys.remove(idx);
                         self.children.remove(idx);
                     }
                 }
+
                 ArtNodeType::Node256 => {
                     if self.children.get(idx).is_some() {
                         self.children.remove(idx);
@@ -229,6 +237,7 @@ impl Node {
                 new_node.leaf = self.leaf;
                 *self = new_node;
             }
+
             ArtNodeType::Node16 => {
                 let mut new_node = Node::new_node48(self.keys.concat());
                 let chsize = self.get_child_size();
@@ -248,6 +257,7 @@ impl Node {
                 }
                 *self = new_node;
             }
+
             ArtNodeType::Node48 => {
                 let mut new_node = Node::new_node256();
                 let ksize = self.get_keys_size();
@@ -270,16 +280,19 @@ impl Node {
 
                 *self = new_node;
             }
+
             ArtNodeType::Node48 => {
                 let mut new_node = Node::new_node16(self.keys.concat());
 
                 *self = new_node;
             }
+
             ArtNodeType::Node256 => {
                 let mut new_node = Node::new_node48(self.keys.concat());
 
                 *self = new_node;
             }
+
             _ => {}
         }
     }
