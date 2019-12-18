@@ -5,6 +5,7 @@ use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm
 use core::arch::x86::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
 
 use core::slice::SliceIndex;
+use std::sync::Mutex;
 use std::u32;
 
 const NODE4MIN: usize = 2;
@@ -44,11 +45,15 @@ struct Node {
     keys: Vec<u8>,
     children: Vec<Node>,
     leaf: Option<Leaf>,
+    dirty: Mutex<bool>,
 }
 
 struct Leaf {
     key: Vec<u8>,
-    value: Vec<u8>,
+
+    // (value_file_index, offset, length)
+    key_ptr: (usize, u64, usize),
+    value_ptr: (usize, u64, usize),
 }
 
 impl Node {
@@ -59,6 +64,7 @@ impl Node {
             keys: keys.to_vec(),
             children: Vec::with_capacity(NODE4MAX),
             leaf: None,
+            dirty: Mutex::from(false),
         }
     }
 
@@ -69,6 +75,7 @@ impl Node {
             keys: keys.to_vec(),
             children: Vec::with_capacity(NODE16MAX),
             leaf: None,
+            dirty: Mutex::from(false),
         }
     }
 
@@ -79,6 +86,7 @@ impl Node {
             keys: keys.to_vec(),
             children: Vec::with_capacity(NODE48MAX),
             leaf: None,
+            dirty: Mutex::from(false),
         }
     }
 
@@ -89,13 +97,27 @@ impl Node {
             keys: vec![],
             children: Vec::with_capacity(NODE256MAX),
             leaf: None,
+            dirty: Mutex::from(false),
         }
     }
 
     #[inline]
-    fn new_leaf_node(key: Vec<u8>, value: Vec<u8>) -> Leaf {
-        Leaf { key, value }
+    fn new_leaf_node(
+        key: Vec<u8>,
+        key_ptr: (usize, u64, usize),
+        value_ptr: (usize, u64, usize),
+    ) -> Leaf {
+        Leaf {
+            key,
+            key_ptr,
+            value_ptr,
+        }
     }
+
+    #[inline]
+    fn insert(&mut self, key: Vec<u8>) {}
+
+    fn remove(&mut self, key: Vec<u8>) {}
 
     #[inline]
     fn index(&self, k: u8) -> Option<usize> {
@@ -228,6 +250,9 @@ impl Node {
         }
     }
 
+    // Node4 --> Node16
+    // Node16 --> Node48
+    // Node48 --> Node256
     #[inline]
     fn grow(&mut self) {
         match &self.typ {
@@ -272,6 +297,9 @@ impl Node {
         }
     }
 
+    // Node256 --> Node48
+    // Node48 --> Node16
+    // Node16 --> Node4
     #[inline]
     fn shrink(&mut self) {
         match &self.typ {
