@@ -4,6 +4,7 @@ use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm
 #[cfg(target_arch = "x86")]
 use core::arch::x86::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
 
+use crate::art::ArtNodeType::{Node16, Node4};
 use core::slice::SliceIndex;
 use std::sync::Mutex;
 use std::u32;
@@ -46,6 +47,9 @@ struct Node {
     children: Vec<Node>,
     leaf: Option<Leaf>,
     dirty: Mutex<bool>,
+
+    // when node grows or shrinks concurrently, lock it.
+    scale_lock: Mutex<()>,
 }
 
 struct Leaf {
@@ -64,7 +68,8 @@ impl Node {
             keys: keys.to_vec(),
             children: Vec::with_capacity(NODE4MAX),
             leaf: None,
-            dirty: Mutex::from(false),
+            dirty: Mutex::new(false),
+            scale_lock: Mutex::new(()),
         }
     }
 
@@ -75,7 +80,8 @@ impl Node {
             keys: keys.to_vec(),
             children: Vec::with_capacity(NODE16MAX),
             leaf: None,
-            dirty: Mutex::from(false),
+            dirty: Mutex::new(false),
+            scale_lock: Mutex::new(()),
         }
     }
 
@@ -87,6 +93,7 @@ impl Node {
             children: Vec::with_capacity(NODE48MAX),
             leaf: None,
             dirty: Mutex::from(false),
+            scale_lock: Mutex::new(()),
         }
     }
 
@@ -98,6 +105,7 @@ impl Node {
             children: Vec::with_capacity(NODE256MAX),
             leaf: None,
             dirty: Mutex::from(false),
+            scale_lock: Mutex::new(()),
         }
     }
 
@@ -255,12 +263,12 @@ impl Node {
     // Node48 --> Node256
     #[inline]
     fn grow(&mut self) {
+        self.scale_lock.lock();
         match &self.typ {
             ArtNodeType::Node4 => {
-                let mut new_node = Node::new_node16(self.keys.concat());
-                self.children.clone_into(&mut new_node.children);
-                new_node.leaf = self.leaf;
-                *self = new_node;
+                self.typ = Node16;
+                self.children.reserve_exact(12);
+                self.keys.reserve_exact(12);
             }
 
             ArtNodeType::Node16 => {
@@ -302,11 +310,12 @@ impl Node {
     // Node16 --> Node4
     #[inline]
     fn shrink(&mut self) {
+        self.scale_lock.lock();
         match &self.typ {
             ArtNodeType::Node16 => {
-                let mut new_node = Node::new_node4(self.keys.concat());
-
-                *self = new_node;
+                self.typ = Node4;
+                self.keys.shrink_to(4);
+                self.children.shrink_to(4);
             }
 
             ArtNodeType::Node48 => {
