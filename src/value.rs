@@ -57,7 +57,7 @@ impl ValueLog {
     // (u8, u64, usize) = (value_file_index, value_offset, value_length)
     pub(crate) fn write(&mut self, value: &[u8]) -> io::Result<(u8, u64, usize)> {
         let mut lf: &LogFile;
-        if self.wf_idx_len.1 + value.len() <= self.limit_per_file {
+        if self.wf_idx_len.1 + value.len() <= self.limit_per_file && self.wf_idx_len.0 > 0 {
             lf = self
                 .files
                 .get(self.wf_idx_len.0)
