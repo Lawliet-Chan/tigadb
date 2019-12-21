@@ -6,7 +6,7 @@ use core::arch::x86::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_se
 
 use crate::art::ArtNodeType::{Node16, Node4};
 use core::slice::SliceIndex;
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 use std::u32;
 
 const NODE4MIN: usize = 2;
@@ -46,18 +46,17 @@ struct Node {
     keys: Vec<u8>,
     children: Vec<Node>,
     leaf: Option<Leaf>,
-    dirty: Mutex<bool>,
 
     // when node grows or shrinks concurrently, lock it.
-    scale_lock: Mutex<()>,
+    scale_lock: RwLock<()>,
 }
 
 struct Leaf {
     key: Vec<u8>,
 
     // (value_file_index, offset, length)
-    key_ptr: (usize, u64, usize),
-    value_ptr: (usize, u64, usize),
+    key_ptr: (u8, u64, usize),
+    value_ptr: (u8, u64, usize),
 }
 
 impl Node {
@@ -68,8 +67,7 @@ impl Node {
             keys: keys.to_vec(),
             children: Vec::with_capacity(NODE4MAX),
             leaf: None,
-            dirty: Mutex::new(false),
-            scale_lock: Mutex::new(()),
+            scale_lock: RwLock::new(()),
         }
     }
 
@@ -80,8 +78,7 @@ impl Node {
             keys: keys.to_vec(),
             children: Vec::with_capacity(NODE16MAX),
             leaf: None,
-            dirty: Mutex::new(false),
-            scale_lock: Mutex::new(()),
+            scale_lock: RwLock::new(()),
         }
     }
 
@@ -92,8 +89,7 @@ impl Node {
             keys: keys.to_vec(),
             children: Vec::with_capacity(NODE48MAX),
             leaf: None,
-            dirty: Mutex::from(false),
-            scale_lock: Mutex::new(()),
+            scale_lock: RwLock::new(()),
         }
     }
 
@@ -104,17 +100,12 @@ impl Node {
             keys: vec![],
             children: Vec::with_capacity(NODE256MAX),
             leaf: None,
-            dirty: Mutex::from(false),
-            scale_lock: Mutex::new(()),
+            scale_lock: RwLock::new(()),
         }
     }
 
     #[inline]
-    fn new_leaf_node(
-        key: Vec<u8>,
-        key_ptr: (usize, u64, usize),
-        value_ptr: (usize, u64, usize),
-    ) -> Leaf {
+    fn new_leaf_node(key: Vec<u8>, key_ptr: (u8, u64, usize), value_ptr: (u8, u64, usize)) -> Leaf {
         Leaf {
             key,
             key_ptr,
@@ -123,12 +114,20 @@ impl Node {
     }
 
     #[inline]
-    fn insert(&mut self, key: Vec<u8>) {}
+    pub(crate) fn insert(
+        &mut self,
+        key: Vec<u8>,
+        key_ptr: (u8, u64, usize),
+        value_ptr: (u8, u64, usize),
+    ) {
+    }
 
-    fn remove(&mut self, key: Vec<u8>) {}
+    #[inline]
+    pub(crate) fn remove(&mut self, key: Vec<u8>) {}
 
     #[inline]
     fn index(&self, k: u8) -> Option<usize> {
+        self.scale_lock.read();
         match &self.typ {
             ArtNodeType::Node4 => {
                 for i in 0..self.get_child_size() {
@@ -185,6 +184,7 @@ impl Node {
 
     #[inline]
     fn add_child(&mut self, key: u8, node: Node) {
+        self.scale_lock.write();
         if self.is_full() {
             self.grow();
             self.add_child(key, node);
@@ -231,6 +231,7 @@ impl Node {
 
     #[inline]
     fn delete_child(&mut self, key: u8) {
+        self.scale_lock.write();
         if let Some(idx) = self.index(key) {
             match &self.typ {
                 ArtNodeType::Node4 | ArtNodeType::Node16 => {
@@ -263,7 +264,7 @@ impl Node {
     // Node48 --> Node256
     #[inline]
     fn grow(&mut self) {
-        self.scale_lock.lock();
+        self.scale_lock.write();
         match &self.typ {
             ArtNodeType::Node4 => {
                 self.typ = Node16;
@@ -310,7 +311,7 @@ impl Node {
     // Node16 --> Node4
     #[inline]
     fn shrink(&mut self) {
-        self.scale_lock.lock();
+        self.scale_lock.write();
         match &self.typ {
             ArtNodeType::Node16 => {
                 self.typ = Node4;
@@ -319,9 +320,8 @@ impl Node {
             }
 
             ArtNodeType::Node48 => {
-                let mut new_node = Node::new_node16(self.keys.concat());
-
-                *self = new_node;
+                self.typ = Node16;
+                self.children.shrink_to(16);
             }
 
             ArtNodeType::Node256 => {
