@@ -24,7 +24,7 @@ pub(crate) struct ValueLog<'a> {
 
 impl ValueLog {
     pub(crate) fn new(dir: &'static str, limit_per_file: usize, fsync: bool) -> Self {
-        fs::create_dir_all(dir)?;
+        fs::create_dir_all(dir).expect(format!("create value dir {} error", dir).as_str());
         let paths = fs::read_dir(dir).expect("find no value dir");
         let mut files: Vec<LogFile> = Vec::new();
         for path in paths {
