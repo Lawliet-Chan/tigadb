@@ -6,6 +6,7 @@ use core::arch::x86::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_se
 
 use crate::art::ArtNodeType::{Node16, Node4};
 use core::slice::SliceIndex;
+use std::fs::create_dir_all;
 use std::sync::{Mutex, RwLock};
 use std::u32;
 
@@ -41,7 +42,7 @@ enum ArtNodeType {
     Node256,
 }
 
-struct Node {
+pub(crate) struct Node {
     typ: ArtNodeType,
     keys: Vec<u8>,
     children: Vec<Node>,
@@ -51,12 +52,12 @@ struct Node {
     scale_lock: RwLock<()>,
 }
 
-struct Leaf {
+pub(crate) struct Leaf {
     key: Vec<u8>,
 
     // (value_file_index, offset, length)
-    key_ptr: (u8, u64, usize),
-    value_ptr: (u8, u64, usize),
+    key_pos: (u8, u64, usize),
+    value_pos: (u8, u64, usize),
 }
 
 impl Node {
@@ -105,11 +106,11 @@ impl Node {
     }
 
     #[inline]
-    fn new_leaf_node(key: Vec<u8>, key_ptr: (u8, u64, usize), value_ptr: (u8, u64, usize)) -> Leaf {
+    fn new_leaf_node(key: Vec<u8>, key_pos: (u8, u64, usize), value_pos: (u8, u64, usize)) -> Leaf {
         Leaf {
             key,
-            key_ptr,
-            value_ptr,
+            key_pos,
+            value_pos,
         }
     }
 
