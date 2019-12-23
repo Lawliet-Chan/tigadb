@@ -8,7 +8,6 @@ use std::path::Path;
 use std::os::unix::prelude::*;
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
-use std::process::id;
 
 pub(crate) struct GroupLog {
     dir: &'static str,
