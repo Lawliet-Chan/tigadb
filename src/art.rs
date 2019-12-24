@@ -4,28 +4,31 @@ use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm
 #[cfg(target_arch = "x86")]
 use core::arch::x86::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
 
-use crate::art::ArtNodeType::{Node16, Node4};
+use crate::art::ArtNodeType::{Node16, Node256, Node4, Node48};
 use core::slice::SliceIndex;
 use std::fs::create_dir_all;
-use std::sync::{Mutex, RwLock};
 use std::u32;
 
 const NODE4MIN: usize = 2;
 const NODE4MAX: usize = 4;
+const NODE4KEYS: usize = 4;
 
 const NODE16MIN: usize = 5;
 const NODE16MAX: usize = 16;
+const NODE16KEYS: usize = 16;
 
 const NODE48MIN: usize = 17;
 const NODE48MAX: usize = 48;
+const NODE48KEYS: usize = 256;
 
 const NODE256MIN: usize = 49;
 const NODE256MAX: usize = 256;
+const NODE256KEYS: usize = 0;
 
 const PREFIX_LEN: usize = 10;
 
 #[derive(PartialEq)]
-enum ArtNodeType {
+pub(crate) enum ArtNodeType {
     // key 4
     // children 4
     Node4,
@@ -47,9 +50,6 @@ pub(crate) struct Node {
     keys: Vec<u8>,
     children: Vec<Node>,
     leaf: Option<Leaf>,
-
-    // when node grows or shrinks concurrently, lock it.
-    scale_lock: RwLock<()>,
 }
 
 pub(crate) struct Leaf {
@@ -62,51 +62,28 @@ pub(crate) struct Leaf {
 
 impl Node {
     #[inline]
-    fn new_node4(keys: [u8; 4]) -> Node {
+    pub(crate) fn new_node(typ: ArtNodeType) -> Node {
+        let (key_cap, children_cap) = match typ {
+            ArtNodeType::Node4 => (NODE4KEYS, NODE4MAX),
+            ArtNodeType::Node16 => (NODE16KEYS, NODE16MAX),
+            ArtNodeType::Node48 => (NODE48KEYS, NODE48MAX),
+            ArtNodeType::Node256 => (NODE256KEYS, NODE256MAX),
+        };
+
         Node {
-            typ: ArtNodeType::Node4,
-            keys: keys.to_vec(),
-            children: Vec::with_capacity(NODE4MAX),
+            typ,
+            keys: Vec::with_capacity(key_cap),
+            children: Vec::with_capacity(children_cap),
             leaf: None,
-            scale_lock: RwLock::new(()),
         }
     }
 
     #[inline]
-    fn new_node16(keys: [u8; 16]) -> Node {
-        Node {
-            typ: ArtNodeType::Node16,
-            keys: keys.to_vec(),
-            children: Vec::with_capacity(NODE16MAX),
-            leaf: None,
-            scale_lock: RwLock::new(()),
-        }
-    }
-
-    #[inline]
-    fn new_node48(keys: [u8; 256]) -> Node {
-        Node {
-            typ: ArtNodeType::Node48,
-            keys: keys.to_vec(),
-            children: Vec::with_capacity(NODE48MAX),
-            leaf: None,
-            scale_lock: RwLock::new(()),
-        }
-    }
-
-    #[inline]
-    fn new_node256() -> Node {
-        Node {
-            typ: ArtNodeType::Node256,
-            keys: vec![],
-            children: Vec::with_capacity(NODE256MAX),
-            leaf: None,
-            scale_lock: RwLock::new(()),
-        }
-    }
-
-    #[inline]
-    fn new_leaf_node(key: Vec<u8>, key_pos: (u8, u64, usize), value_pos: (u8, u64, usize)) -> Leaf {
+    pub(crate) fn new_leaf_node(
+        key: Vec<u8>,
+        key_pos: (u8, u64, usize),
+        value_pos: (u8, u64, usize),
+    ) -> Leaf {
         Leaf {
             key,
             key_pos,
@@ -118,9 +95,22 @@ impl Node {
     pub(crate) fn insert(
         &mut self,
         key: Vec<u8>,
-        key_ptr: (u8, u64, usize),
-        value_ptr: (u8, u64, usize),
+        key_pos: (u8, u64, usize),
+        value_pos: (u8, u64, usize),
     ) {
+    }
+
+    #[inline]
+    pub(crate) fn get(&self, key: Vec<u8>) {}
+
+    #[inline]
+    pub(crate) fn update(
+        &mut self,
+        key: Vec<u8>,
+        key_pos: (u8, u64, usize),
+        value_pos: (u8, u64, usize),
+    ) {
+
     }
 
     #[inline]
@@ -128,7 +118,6 @@ impl Node {
 
     #[inline]
     fn index(&self, k: u8) -> Option<usize> {
-        self.scale_lock.read();
         match &self.typ {
             ArtNodeType::Node4 => {
                 for i in 0..self.get_child_size() {
@@ -185,7 +174,6 @@ impl Node {
 
     #[inline]
     fn add_child(&mut self, key: u8, node: Node) {
-        self.scale_lock.write();
         if self.is_full() {
             self.grow();
             self.add_child(key, node);
@@ -232,7 +220,6 @@ impl Node {
 
     #[inline]
     fn delete_child(&mut self, key: u8) {
-        self.scale_lock.write();
         if let Some(idx) = self.index(key) {
             match &self.typ {
                 ArtNodeType::Node4 | ArtNodeType::Node16 => {
@@ -265,7 +252,6 @@ impl Node {
     // Node48 --> Node256
     #[inline]
     fn grow(&mut self) {
-        self.scale_lock.write();
         match &self.typ {
             ArtNodeType::Node4 => {
                 self.typ = Node16;
@@ -274,7 +260,7 @@ impl Node {
             }
 
             ArtNodeType::Node16 => {
-                let mut new_node = Node::new_node48(self.keys.concat());
+                let mut new_node = Node::new_node(Node48);
                 let chsize = self.get_child_size();
                 for i in 0..chsize {
                     if let Some(child) = self.children.get(i) {
@@ -294,13 +280,14 @@ impl Node {
             }
 
             ArtNodeType::Node48 => {
-                let mut new_node = Node::new_node256();
+                let mut new_node = Node::new_node(Node256);
                 let ksize = self.get_keys_size();
                 for i in 0..ksize {
                     if let Some(child) = self.find_child(i as u8) {
                         new_node.set_child(i, *child);
                     }
                 }
+                new_node.keys.clone_from(&self.keys);
                 *self = new_node;
             }
             _ => {}
@@ -312,7 +299,6 @@ impl Node {
     // Node16 --> Node4
     #[inline]
     fn shrink(&mut self) {
-        self.scale_lock.write();
         match &self.typ {
             ArtNodeType::Node16 => {
                 self.typ = Node4;

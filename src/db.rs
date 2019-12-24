@@ -1,4 +1,4 @@
-use crate::art::Node;
+use crate::art::{ArtNodeType, Node};
 use crate::option::Option;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
@@ -19,6 +19,7 @@ impl DB {
         DB {
             opt,
             txn_id: AtomicUsize::new(0),
+            tree: Node::new_node(ArtNodeType::Node4),
         }
     }
 }

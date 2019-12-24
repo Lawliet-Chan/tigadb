@@ -90,13 +90,18 @@ impl GroupLog {
 struct LogFile {
     path: &'static str,
     file: File,
+    compacting_file: Option<File>,
 }
 
 impl LogFile {
     #[inline]
     fn new<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let file = File::create(path)?;
-        Ok(Self { path, file })
+        Ok(Self {
+            path,
+            file,
+            compacting_file: None,
+        })
     }
 
     #[inline]
