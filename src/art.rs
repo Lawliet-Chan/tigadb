@@ -56,8 +56,7 @@ pub(crate) struct Leaf {
     key: Vec<u8>,
 
     // (value_file_index, offset, length)
-    key_pos: (u8, u64, usize),
-    value_pos: (u8, u64, usize),
+    value_pos: (u8, u64, u64),
 }
 
 impl Node {
@@ -79,39 +78,18 @@ impl Node {
     }
 
     #[inline]
-    pub(crate) fn new_leaf_node(
-        key: Vec<u8>,
-        key_pos: (u8, u64, usize),
-        value_pos: (u8, u64, usize),
-    ) -> Leaf {
-        Leaf {
-            key,
-            key_pos,
-            value_pos,
-        }
+    pub(crate) fn new_leaf_node(key: Vec<u8>, value_pos: (u8, u64, u64)) -> Leaf {
+        Leaf { key, value_pos }
     }
 
     #[inline]
-    pub(crate) fn insert(
-        &mut self,
-        key: Vec<u8>,
-        key_pos: (u8, u64, usize),
-        value_pos: (u8, u64, usize),
-    ) {
-    }
+    pub(crate) fn insert(&mut self, key: Vec<u8>, value_pos: (u8, u64, u64)) {}
 
     #[inline]
     pub(crate) fn get(&self, key: Vec<u8>) {}
 
     #[inline]
-    pub(crate) fn update(
-        &mut self,
-        key: Vec<u8>,
-        key_pos: (u8, u64, usize),
-        value_pos: (u8, u64, usize),
-    ) {
-
-    }
+    pub(crate) fn update(&mut self, key: Vec<u8>, value_pos: (u8, u64, u64)) {}
 
     #[inline]
     pub(crate) fn remove(&mut self, key: Vec<u8>) {}

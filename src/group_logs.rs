@@ -16,13 +16,13 @@ pub(crate) struct GroupLog {
     // writing-file Index in Vec<LogFile>  and  file length
     // keeping file length just be recorded that Value_Bytes_Offset.
     // (usize, usize) = (index, file_length) = (index, value_offset)
-    wf_idx_len: (usize, usize),
-    limit_per_file: usize,
+    wf_idx_len: (usize, u64),
+    limit_per_file: u64,
 }
 
 impl GroupLog {
     #[inline]
-    pub(crate) fn new(dir: &'static str, limit_per_file: usize) -> Self {
+    pub(crate) fn new(dir: &'static str, limit_per_file: u64) -> Self {
         fs::create_dir_all(dir).expect(format!("create value dir {} error", dir).as_str());
         let paths = fs::read_dir(dir).expect("find no value dir");
         let mut files: Vec<LogFile> = Vec::new();
@@ -53,11 +53,11 @@ impl GroupLog {
         lf.read(offset, len)
     }
 
-    // (u8, u64, usize) = (value_file_index, value_offset, value_length)
+    // (u8, u64, u64) = (value_file_index, value_offset, value_length)
     #[inline]
-    pub(crate) fn write(&mut self, value: &[u8], fsync: bool) -> io::Result<(u8, u64, usize)> {
+    pub(crate) fn write(&mut self, value: &[u8], fsync: bool) -> io::Result<(u8, u64, u64)> {
         let mut lf: &LogFile;
-        if self.wf_idx_len.1 + value.len() <= self.limit_per_file && self.wf_idx_len.0 > 0 {
+        if self.wf_idx_len.1 + value.len() as u64 <= self.limit_per_file && self.wf_idx_len.0 > 0 {
             lf = self
                 .files
                 .get(self.wf_idx_len.0)
@@ -68,7 +68,11 @@ impl GroupLog {
             self.wf_idx_len.1 = 0;
         }
         let len = lf.write(value, fsync)?;
-        Ok((self.wf_idx_len.0 as u8, self.wf_idx_len.1 as u64, len))
+        Ok((
+            self.wf_idx_len.0 as u8,
+            self.wf_idx_len.1 as u64,
+            len as u64,
+        ))
     }
 
     #[inline]
@@ -119,8 +123,8 @@ impl LogFile {
     }
 
     #[inline]
-    fn len(&self) -> usize {
-        self.file.metadata().unwrap().len() as usize
+    fn len(&self) -> u64 {
+        self.file.metadata().unwrap().len()
     }
 
     #[inline]
@@ -129,6 +133,9 @@ impl LogFile {
         self.file.read_to_end(buf)?;
         buf.as_slice()
     }
+
+    #[inline]
+    fn switch_file(&mut self) -> io::Result<()> {}
 
     #[inline]
     fn read_at(&self, offset: u64, len: usize) -> io::Result<[u8]> {
