@@ -16,6 +16,7 @@ impl KV {
         }
     }
 
+    // (u8, u64, u64) = (kv_log_index, value_offset, value_length)
     #[inline]
     pub(crate) fn write(
         &mut self,
@@ -34,8 +35,11 @@ impl KV {
             .concat()
             .as_slice();
         self.meta_log.write(metadata, fsync)?;
-        kv_pos.1 += dividing_point;
-        Ok(kv_pos)
+        Ok((
+            kv_pos.0,
+            kv_pos.1 + dividing_point,
+            kv_pos.2 - dividing_point,
+        ))
     }
 
     #[inline]
