@@ -24,9 +24,9 @@ impl KV {
         value: &[u8],
         fsync: bool,
     ) -> io::Result<(u8, u64, u64)> {
-        let dividing_point = key.len() as u64;
         let kv_data = [*key, *value].concat().as_slice();
         let kv_pos = self.kv_log.write(kv_data, fsync)?;
+        let dividing_point = kv_pos.1 + key.len() as u64;
 
         let kv_offset_u8: [u8; 8] = kv_pos.1.to_be_bytes;
         let kv_len_u8: [u8; 8] = kv_pos.2.to_be_bytes;
@@ -43,5 +43,12 @@ impl KV {
     }
 
     #[inline]
-    pub(crate) fn read(&self, pos: (u8, u64, usize)) -> io::Result<[u8]> {}
+    pub(crate) fn read_meta(&self) -> io::Result<[u8]> {
+        self.meta_log.read_all()
+    }
+
+    #[inline]
+    pub(crate) fn read_kv(&self, fidx: u8, offset: u64, len: usize) -> io::Result<[u8]> {
+        self.kv_log.read(fidx, offset, len)
+    }
 }
