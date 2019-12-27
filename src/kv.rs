@@ -9,10 +9,10 @@ pub(crate) struct KV {
 
 impl KV {
     #[inline]
-    pub(crate) fn new(key_dir: &'static str, value_dir: &'static str, limit_per_file: u64) -> Self {
+    pub(crate) fn new(meta_dir: &'static str, kv_dir: &'static str, limit_per_file: u64) -> Self {
         KV {
-            meta_log: GroupLog::new(key_dir, limit_per_file),
-            kv_log: GroupLog::new(value_dir, limit_per_file),
+            meta_log: GroupLog::new(meta_dir, limit_per_file),
+            kv_log: GroupLog::new(kv_dir, limit_per_file),
         }
     }
 

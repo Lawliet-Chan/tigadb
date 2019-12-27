@@ -265,7 +265,7 @@ impl Node {
                         new_node.set_child(i, *child);
                     }
                 }
-                new_node.keys.clone_from(&self.keys);
+                //new_node.keys.clone_from(&self.keys);
                 *self = new_node;
             }
             _ => {}
@@ -280,19 +280,20 @@ impl Node {
         match &self.typ {
             ArtNodeType::Node16 => {
                 self.typ = Node4;
-                self.keys.shrink_to(4);
-                self.children.shrink_to(4);
+                self.keys.shrink_to(NODE4KEYS);
+                self.children.shrink_to(NODE4MAX);
             }
 
             ArtNodeType::Node48 => {
                 self.typ = Node16;
-                self.children.shrink_to(16);
+                self.keys.shrink_to(NODE16KEYS);
+                self.children.shrink_to(NODE16MAX);
             }
 
             ArtNodeType::Node256 => {
-                let mut new_node = Node::new_node48(self.keys.concat());
-
-                *self = new_node;
+                self.typ = Node48;
+                self.keys.reserve_exact(NODE48KEYS);
+                self.children.shrink_to(NODE48MAX);
             }
 
             _ => {}
