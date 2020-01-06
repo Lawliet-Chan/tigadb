@@ -55,7 +55,7 @@ pub(crate) struct Node {
 pub(crate) struct Leaf {
     key: Vec<u8>,
 
-    // (value_file_index, offset, length)
+    // (kv_file_index, offset, length)
     value_pos: (u8, u64, u64),
 }
 
@@ -265,7 +265,6 @@ impl Node {
                         new_node.set_child(i, *child);
                     }
                 }
-                //new_node.keys.clone_from(&self.keys);
                 *self = new_node;
             }
             _ => {}
