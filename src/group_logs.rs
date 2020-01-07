@@ -27,8 +27,8 @@ pub(crate) struct GroupLog {
 impl GroupLog {
     #[inline]
     pub(crate) fn new(dir: &'static str, limit_per_file: u64) -> Self {
-        fs::create_dir_all(dir).expect(format!("create value dir {} error", dir).as_str());
-        let paths = fs::read_dir(dir).expect("find no value dir");
+        fs::create_dir_all(dir).expect(format!("create data dir {} error", dir).as_str());
+        let paths = fs::read_dir(dir).expect("find no data dir");
         let mut data_files: Vec<File> = Vec::new();
         let mut cpt_files: Vec<File> = Vec::new();
         for path in paths {
@@ -65,7 +65,7 @@ impl GroupLog {
         let f = self
             .data_files
             .get(fidx as usize)
-            .ok_or(Err("reading: find no value-log file"))?;
+            .ok_or(Err("reading: find no data file"))?;
         Self::read_file(f, offset, len)
     }
 
@@ -77,9 +77,9 @@ impl GroupLog {
             f = self
                 .data_files
                 .get(self.wf_idx_len.0)
-                .ok_or(Err("writing: find no value-log file"))?;
+                .ok_or(Err("writing: find no data file"))?;
         } else {
-            f = &File::create(format!("{}/value.{}", self.dir, self.wf_idx_len.0 + 1).as_str())?;
+            f = &File::create(format!("{}/data.{}", self.dir, self.wf_idx_len.0 + 1).as_str())?;
             self.wf_idx_len.0 += 1;
             self.wf_idx_len.1 = 0;
         }
