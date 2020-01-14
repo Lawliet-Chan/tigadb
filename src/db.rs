@@ -1,11 +1,11 @@
-use crate::art::{ArtNodeType, Node};
+use crate::art::{ArtNodeType, ArtTree, Node};
 use crate::kv::KV;
 use crate::option::Option;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-pub struct DB {
+pub struct DB<'a> {
     opt: Option,
 
     // write-transaction id
@@ -27,7 +27,7 @@ pub struct DB {
     // key_cache is already in disk and going to apply into ART-tree.
     key_cache: Arc<Vec<[u8]>>,
 
-    tree: Node,
+    tree: ArtTree<'a>,
     disk: KV,
 }
 
@@ -40,8 +40,8 @@ impl DB {
             commit_ts: now,
             key_cache: Arc::new(Vec::new()),
             apply_ts: now,
-            tree: Node::new_node(ArtNodeType::Node4),
             disk: KV::new(opt.meta_dir, opt.kv_dir, opt.limit_per_file),
+            tree: ArtTree::default(),
         }
     }
 }

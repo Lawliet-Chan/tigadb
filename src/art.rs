@@ -27,6 +27,63 @@ const NODE256KEYS: usize = 0;
 
 const PREFIX_LEN: usize = 10;
 
+pub(crate) struct ArtTree<'a> {
+    root: Option<&'a Node>,
+}
+
+impl Default for ArtTree {
+    #[inline]
+    fn default() -> Self {
+        Self { root: None }
+    }
+}
+
+impl ArtTree {
+    #[inline]
+    pub(crate) fn insert(&mut self, key: Vec<u8>, value_pos: (u8, u64, u64)) {
+        self.insert_with_depth(self.root, key, value_pos, 0)
+    }
+
+    #[inline]
+    pub(crate) fn get(&self, key: Vec<u8>) -> Option<(u8, u64, u64)> {
+        self.get_with_depth(self.root, key, 0)
+    }
+
+    #[inline]
+    pub(crate) fn remove(&mut self, key: Vec<u8>) {
+        self.remove_with_depth(self.root, key, 0)
+    }
+
+    #[inline]
+    fn insert_with_depth(
+        &mut self,
+        node: Option<&Node>,
+        key: Vec<u8>,
+        value_pos: (u8, u64, u64),
+        depth: usize,
+    ) {
+        depth += 1;
+        self.insert_with_depth(node, key, value_pos, depth)
+    }
+
+    #[inline]
+    fn get_with_depth(
+        &self,
+        node: Option<&Node>,
+        key: Vec<u8>,
+        depth: usize,
+    ) -> Option<(u8, u64, u64)> {
+        depth += 1;
+        self.get_with_depth(node, key, depth)
+    }
+
+    #[inline]
+    fn remove_with_depth(&mut self, node: Option<&Node>, key: Vec<u8>, depth: usize) {
+        depth += 1;
+        self.remove_with_depth(node, key, depth)
+    }
+}
+
 #[derive(PartialEq)]
 pub(crate) enum ArtNodeType {
     // key 4
@@ -49,14 +106,10 @@ pub(crate) struct Node {
     typ: ArtNodeType,
     keys: Vec<u8>,
     children: Vec<Node>,
-    leaf: Option<Leaf>,
-}
 
-pub(crate) struct Leaf {
-    key: Vec<u8>,
-
+    // only leaf node has it.
     // (kv_file_index, offset, length)
-    value_pos: (u8, u64, u64),
+    value_pos: Option<(u8, u64, u64)>,
 }
 
 impl Node {
@@ -73,26 +126,9 @@ impl Node {
             typ,
             keys: Vec::with_capacity(key_cap),
             children: Vec::with_capacity(children_cap),
-            leaf: None,
+            value_pos: None,
         }
     }
-
-    #[inline]
-    pub(crate) fn new_leaf_node(key: Vec<u8>, value_pos: (u8, u64, u64)) -> Leaf {
-        Leaf { key, value_pos }
-    }
-
-    #[inline]
-    pub(crate) fn insert(&mut self, key: Vec<u8>, value_pos: (u8, u64, u64)) {}
-
-    #[inline]
-    pub(crate) fn get(&self, key: Vec<u8>) {}
-
-    #[inline]
-    pub(crate) fn update(&mut self, key: Vec<u8>, value_pos: (u8, u64, u64)) {}
-
-    #[inline]
-    pub(crate) fn remove(&mut self, key: Vec<u8>) {}
 
     #[inline]
     fn index(&self, k: u8) -> Option<usize> {
@@ -331,7 +367,7 @@ impl Node {
 
     #[inline]
     fn is_leaf(&self) -> bool {
-        self.leaf.is_some()
+        self.value_pos.is_some()
     }
 
     #[inline]

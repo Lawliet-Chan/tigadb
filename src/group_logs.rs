@@ -106,7 +106,11 @@ impl GroupLog {
     }
 
     #[inline]
-    fn compact(&mut self) -> io::Result<()> {}
+    fn compact(&mut self, pos: Vec<(u8, u64, u64)>) -> io::Result<()> {
+        let mut iter = pos.iter();
+        while let Some(po) = iter.next() {}
+        Ok(())
+    }
 
     #[inline]
     fn read_file(file: &File, offset: u64, len: usize) -> io::Result<[u8]> {
