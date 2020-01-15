@@ -18,8 +18,14 @@ pub(crate) struct GroupLog {
 
     // writing-file Index in Vec<LogFile>  and  file length
     // keeping file length just be recorded that Value_Bytes_Offset.
-    // (usize, usize) = (index, file_length) = (index, value_offset)
-    wf_idx_len: (usize, u64),
+    /// (usize, usize) = (index, file_length) = (index, value_offset)
+
+    /// index and file length of data_file writing
+    dfw_idx_len: (usize, u64),
+
+    /// index and file length of cpt_file writing
+    cfw_idx_len: (usize, u64),
+
     limit_per_file: u64,
 }
 
@@ -48,20 +54,24 @@ impl GroupLog {
             }
         }
         data_files.sort();
+        let d_idx = data_files.len();
+        let d_len = data_files.last().unwrap().metadata().unwrap().len();
+
         cpt_files.sort();
-        let idx = data_files.len();
-        let len = data_files.last().unwrap().len();
+        let c_idx = cpt_files.len();
+        let c_len = cpt_files.last().unwrap().metadata().unwrap().len();
         GroupLog {
             dir,
             data_files,
             cpt_files,
-            wf_idx_len: (idx, len),
+            dfw_idx_len: (d_idx, d_len),
+            cfw_idx_len: (c_idx, c_len),
             limit_per_file,
         }
     }
 
     #[inline]
-    pub(crate) fn read(&self, fidx: u8, offset: u64, len: usize) -> io::Result<[u8]> {
+    pub(crate) fn read_data(&self, fidx: u8, offset: u64, len: usize) -> io::Result<[u8]> {
         let f = self
             .data_files
             .get(fidx as usize)
@@ -71,25 +81,26 @@ impl GroupLog {
 
     // (u8, u64, u64) = (value_file_index, value_offset, value_length)
     #[inline]
-    pub(crate) fn write(&mut self, value: &[u8], fsync: bool) -> io::Result<(u8, u64, u64)> {
+    pub(crate) fn write_data(&mut self, value: &[u8], fsync: bool) -> io::Result<(u8, u64, u64)> {
         let mut f: &File;
-        if self.wf_idx_len.1 + value.len() as u64 <= self.limit_per_file && self.wf_idx_len.0 > 0 {
+        if self.dfw_idx_len.1 + value.len() as u64 <= self.limit_per_file && self.dfw_idx_len.0 > 0
+        {
             f = self
                 .data_files
-                .get(self.wf_idx_len.0)
+                .get(self.dfw_idx_len.0)
                 .ok_or(Err("writing: find no data file"))?;
         } else {
-            f = &File::create(format!("{}/data.{}", self.dir, self.wf_idx_len.0 + 1).as_str())?;
-            self.wf_idx_len.0 += 1;
-            self.wf_idx_len.1 = 0;
+            f = &File::create(format!("{}/data.{}", self.dir, self.dfw_idx_len.0 + 1).as_str())?;
+            self.dfw_idx_len.0 += 1;
+            self.dfw_idx_len.1 = 0;
         }
         let len = f.write(value)?;
         if fsync {
             f.sync_all()?;
         }
         Ok((
-            self.wf_idx_len.0 as u8,
-            self.wf_idx_len.1 as u64,
+            self.dfw_idx_len.0 as u8,
+            self.dfw_idx_len.1 as u64,
             len as u64,
         ))
     }
@@ -106,10 +117,40 @@ impl GroupLog {
     }
 
     #[inline]
-    fn compact(&mut self, pos: Vec<(u8, u64, u64)>) -> io::Result<()> {
+    pub(crate) fn write_cpt(&mut self, pos: Vec<(u8, u64, u64)>) -> io::Result<(u8, u64, u64)> {
+        let mut cpt_data = Vec::new();
         let mut iter = pos.iter();
-        while let Some(po) = iter.next() {}
-        Ok(())
+        while let Some(po) = iter.next() {
+            let idx = po.0;
+            let offset = po.1;
+            let len = po.2 as usize;
+            if let Some(data_file) = self.data_files.get(idx as usize) {
+                let data = Self::read_file(data_file, offset, len)?;
+                cpt_data.append(data);
+            }
+        }
+        if !cpt_data.is_empty() {
+            let mut f: &File;
+            if self.cfw_idx_len.1 + cpt_data.len() as u64 <= self.limit_per_file
+                && self.cfw_idx_len.0 > 0
+            {
+                f = self
+                    .cpt_files
+                    .get(self.cfw_idx_len.0)
+                    .ok_or(Err("compacting: find no compacting file"))?;
+            } else {
+                f = &File::create(format!("{}/cpt.{}", self.dir, self.cfw_idx_len.0 + 1).as_str())?;
+                self.cfw_idx_len.0 += 1;
+                self.cfw_idx_len.1 = 0;
+            }
+            let len = f.write(cpt_data)?;
+            f.sync_all()?;
+        }
+        Ok((
+            self.cfw_idx_len.0 as u8,
+            self.cfw_idx_len.1 as u64,
+            len as u64,
+        ))
     }
 
     #[inline]
