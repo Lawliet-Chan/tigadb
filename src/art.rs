@@ -108,7 +108,7 @@ pub(crate) struct Node {
     children: Vec<Node>,
 
     // only leaf node has it.
-    // (kv_file_index, offset, length)
+    // (kv_log_index, value_offset, length)
     value_pos: Option<(u8, u64, u64)>,
 }
 

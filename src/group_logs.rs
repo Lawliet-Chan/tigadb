@@ -72,10 +72,13 @@ impl GroupLog {
     }
 
     #[inline]
-    pub(crate) fn read_data(&self, fidx: u8, offset: u64, len: usize) -> io::Result<[u8]> {
+    pub(crate) fn read_data(&self, value_pos: (u8, u64, u64)) -> io::Result<[u8]> {
+        let fidx = value_pos.0 as usize;
+        let offset = value_pos.1;
+        let len = value_pos.2 as usize;
         let f = self
             .data_files
-            .get(fidx as usize)
+            .get(fidx)
             .ok_or(Err("reading: find no data file"))?;
         Self::read_file(f, offset, len)
     }
