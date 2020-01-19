@@ -31,14 +31,14 @@ pub(crate) struct ArtTree<'a> {
     root: Option<&'a Node>,
 }
 
-impl Default for ArtTree {
+impl<'a> Default for ArtTree<'a> {
     #[inline]
     fn default() -> Self {
         Self { root: None }
     }
 }
 
-impl ArtTree {
+impl<'a> ArtTree<'a> {
     #[inline]
     pub(crate) fn insert(&mut self, key: Vec<u8>, value_pos: (u8, u64, u64)) {
         self.insert_with_depth(self.root, key, value_pos, 0)

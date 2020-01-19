@@ -25,14 +25,14 @@ pub struct DB<'a> {
     // Otherwise, just read in ART-tree.
 
     // key_cache is already in disk and going to apply into ART-tree.
-    key_cache: Arc<Vec<[u8]>>,
+    key_cache: Arc<Vec<u8>>,
 
     tree: ArtTree<'a>,
     disk: KV,
 }
 
-impl DB {
-    pub fn new(opt: Option) -> DB {
+impl<'a> DB<'a> {
+    pub fn new(opt: Option) -> DB<'a> {
         let now = SystemTime::now();
         DB {
             opt,

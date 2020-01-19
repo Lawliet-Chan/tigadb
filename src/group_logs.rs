@@ -40,15 +40,15 @@ impl GroupLog {
         for path in paths {
             let p = path.unwrap().path();
             if p.is_file() {
-                if !p.file_name().unwrap().to_str().contains(".meta") {
-                    //data_files
+                if p.file_name().unwrap().to_str().contains("data") {
+                    // data_files
                     let df =
                         File::create(p).expect(format!("recover data file {} error", p).as_str());
                     data_files.push(df);
-                } else {
-                    //compacting_files
-                    let cf = File::create(p)
-                        .expect(format!("recover compacting file {} error", p).as_str());
+                } else if p.file_name().unwrap().to_str().contains("meta") {
+                    // meta_files
+                    let cf =
+                        File::create(p).expect(format!("recover meta file {} error", p).as_str());
                     meta_files.push(cf);
                 }
             }
@@ -72,7 +72,7 @@ impl GroupLog {
     }
 
     #[inline]
-    pub(crate) fn read_data(&self, value_pos: (u8, u64, u64)) -> io::Result<[u8]> {
+    pub(crate) fn read_data(&self, value_pos: (u8, u64, u64)) -> io::Result<Vec<u8>> {
         let fidx = value_pos.0 as usize;
         let offset = value_pos.1;
         let len = value_pos.2 as usize;
@@ -98,7 +98,7 @@ impl GroupLog {
         } else {
             f = &File::create(format!("{}/meta.{}", self.dir, self.mfw_idx_len.0 + 1).as_str())?;
         }
-        let len = f.write(meta_u8)?;
+        let len = f.write(meta_u8.as_slice())?;
         if fsync {
             f.sync_all()?;
         }
@@ -142,7 +142,7 @@ impl GroupLog {
             .meta_files
             .get_mut(pos.0 as usize)
             .ok_or(Err("Writing: find no meta file"))?;
-        Self::write_at(f, bytes, pos.1)?;
+        Self::write_at(f, bytes.as_slice(), pos.1)?;
         if fsync {
             f.sync_all()?;
         }
@@ -150,29 +150,29 @@ impl GroupLog {
     }
 
     #[inline]
-    pub(crate) fn read_all_meta(&self) -> io::Result<[u8]> {
+    pub(crate) fn read_all_meta(&self) -> io::Result<Vec<u8>> {
         Self::read_all(&self.meta_files)
     }
 
     #[inline]
-    pub(crate) fn read_all_data(&self) -> io::Result<[u8]> {
+    pub(crate) fn read_all_data(&self) -> io::Result<Vec<u8>> {
         Self::read_all(&self.data_files)
     }
 
     #[inline]
-    fn read_all(files: &Vec<File>) -> io::Result<[u8]> {
-        let ref mut buf: Vec<u8> = Vec::new();
+    fn read_all(files: &Vec<File>) -> io::Result<Vec<u8>> {
+        let mut buf =  Vec::new();
         let mut it = files.iter();
         let file = it.next();
         while let Some(mut f) = file {
             f.read_to_end(buf)?;
         }
-        Ok(*buf.as_slice())
+        Ok(buf)
     }
 
     #[inline]
-    fn read_file(file: &File, offset: u64, len: usize) -> io::Result<[u8]> {
-        let buf = &mut [u8; len];
+    fn read_file(file: &File, offset: u64, len: usize) -> io::Result<Vec<u8>> {
+        let buf = &mut Vec::with_capacity(len);
         #[cfg(target_os = "unix")]
         {
             file.read_at(buf, offset)
@@ -198,11 +198,11 @@ impl GroupLog {
     }
 
     #[inline]
-    fn meta_to_bytes(meta: (u8, u64, u64, u64)) -> &[u8] {
+    fn meta_to_bytes(meta: (u8, u64, u64, u64)) -> Vec<u8> {
         let off_u8: [u8; 8] = meta.1.to_be_bytes;
         let koff_u8: [u8; 8] = meta.2.to_be_bytes;
         let len_u8: [u8; 8] = meta.3.to_be_bytes;
-        [meta.0, off_u8, koff_u8, len_u8].concat().as_slice()
+        [meta.0, off_u8, koff_u8, len_u8].to_vec()
     }
 
     #[inline]
@@ -210,10 +210,10 @@ impl GroupLog {
         let (fdix_u8, left3) = bytes.split_at(1);
         let (off_u8, left2) = left3.split_at(8);
         let (k_off_u8, len_u8) = left2.split_at(8);
-        let fidx = u8::from_be_bytes(*fdix_u8 as [u8; 1]);
-        let off = u64::from_be_bytes(*off_u8 as [u8; 8]);
-        let k_off = u64::from_be_bytes(*len_u8 as [u8; 8]);
-        let len = u64::from_be_bytes(*len_u8 as [u8; 8]);
+        let fidx = u8::from_be_bytes(*fdix_u8);
+        let off = u64::from_be_bytes(*off_u8);
+        let k_off = u64::from_be_bytes(*len_u8);
+        let len = u64::from_be_bytes(*len_u8);
         (fidx, off, k_off, len)
     }
 }
