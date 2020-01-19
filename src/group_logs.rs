@@ -5,6 +5,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::{u64, u8};
 
+use std::cmp::Ordering;
 #[cfg(target_os = "unix")]
 use std::os::unix::prelude::*;
 #[cfg(target_os = "windows")]
@@ -40,15 +41,17 @@ impl GroupLog {
         for path in paths {
             let p = path.unwrap().path();
             if p.is_file() {
-                if p.file_name().unwrap().to_str().contains("data") {
+                if p.file_name().unwrap().to_str().unwrap().contains("data") {
                     // data_files
-                    let df =
-                        File::create(p).expect(format!("recover data file {} error", p).as_str());
+                    let df = File::create(p).expect(
+                        format!("recover data file {} error", p.to_str().unwrap()).as_str(),
+                    );
                     data_files.push(df);
-                } else if p.file_name().unwrap().to_str().contains("meta") {
+                } else if p.file_name().unwrap().to_str().unwrap().contains("meta") {
                     // meta_files
-                    let cf =
-                        File::create(p).expect(format!("recover meta file {} error", p).as_str());
+                    let cf = File::create(p).expect(
+                        format!("recover meta file {} error", p.to_str().unwrap()).as_str(),
+                    );
                     meta_files.push(cf);
                 }
             }
@@ -76,10 +79,10 @@ impl GroupLog {
         let fidx = value_pos.0 as usize;
         let offset = value_pos.1;
         let len = value_pos.2 as usize;
-        let f = self
-            .data_files
-            .get(fidx)
-            .ok_or(Err("reading: find no data file"))?;
+        let f = self.data_files.get(fidx).ok_or(io::Error::new(
+            io::ErrorKind::Other,
+            "reading: find no data file",
+        ))?;
         Self::read_file(f, offset, len)
     }
 
@@ -94,7 +97,10 @@ impl GroupLog {
             f = self
                 .meta_files
                 .get_mut(self.mfw_idx_len.0)
-                .ok_or(Err("Writing: find no meta file"))?;
+                .ok_or(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Writing: find no meta file",
+                ))?;
         } else {
             f = &File::create(format!("{}/meta.{}", self.dir, self.mfw_idx_len.0 + 1).as_str())?;
         }
@@ -113,7 +119,10 @@ impl GroupLog {
             f = self
                 .data_files
                 .get_mut(self.dfw_idx_len.0)
-                .ok_or(Err("writing: find no data file"))?;
+                .ok_or(io::Error::new(
+                    io::ErrorKind::Other,
+                    "writing: find no data file",
+                ))?;
         } else {
             f = &File::create(format!("{}/data.{}", self.dir, self.dfw_idx_len.0 + 1).as_str())?;
             self.dfw_idx_len.0 += 1;
@@ -130,6 +139,7 @@ impl GroupLog {
         ))
     }
 
+    /*
     #[inline]
     pub(crate) fn write_meta(
         &mut self,
@@ -148,6 +158,7 @@ impl GroupLog {
         }
         Ok(())
     }
+    */
 
     #[inline]
     pub(crate) fn read_all_meta(&self) -> io::Result<Vec<u8>> {
@@ -161,11 +172,11 @@ impl GroupLog {
 
     #[inline]
     fn read_all(files: &Vec<File>) -> io::Result<Vec<u8>> {
-        let mut buf =  Vec::new();
+        let mut buf = Vec::new();
         let mut it = files.iter();
         let file = it.next();
         while let Some(mut f) = file {
-            f.read_to_end(buf)?;
+            f.read_to_end(&mut buf)?;
         }
         Ok(buf)
     }
@@ -182,9 +193,10 @@ impl GroupLog {
         {
             file.seek_read(buf, offset)
         }
+        Ok(buf.to_vec())
     }
 
-    #[inline]
+    /*    #[inline]
     fn write_at(file: &mut File, buf: &[u8], offset: u64) -> io::Result<usize> {
         #[cfg(target_os = "unix")]
         {
@@ -195,14 +207,19 @@ impl GroupLog {
         {
             file.seek_write(buf, offset)
         }
-    }
+    }*/
 
     #[inline]
     fn meta_to_bytes(meta: (u8, u64, u64, u64)) -> Vec<u8> {
-        let off_u8: [u8; 8] = meta.1.to_be_bytes;
-        let koff_u8: [u8; 8] = meta.2.to_be_bytes;
-        let len_u8: [u8; 8] = meta.3.to_be_bytes;
-        [meta.0, off_u8, koff_u8, len_u8].to_vec()
+        let off_u8: [u8; 8] = meta.1.to_be_bytes();
+        let koff_u8: [u8; 8] = meta.2.to_be_bytes();
+        let len_u8: [u8; 8] = meta.3.to_be_bytes();
+        let mut bytes = Vec::new();
+        bytes.push(meta.0);
+        bytes.append(&mut off_u8.to_vec());
+        bytes.append(&mut koff_u8.to_vec());
+        bytes.append(&mut len_u8.to_vec());
+        bytes
     }
 
     #[inline]
@@ -210,10 +227,38 @@ impl GroupLog {
         let (fdix_u8, left3) = bytes.split_at(1);
         let (off_u8, left2) = left3.split_at(8);
         let (k_off_u8, len_u8) = left2.split_at(8);
-        let fidx = u8::from_be_bytes(*fdix_u8);
-        let off = u64::from_be_bytes(*off_u8);
-        let k_off = u64::from_be_bytes(*len_u8);
-        let len = u64::from_be_bytes(*len_u8);
+        let mut fidx_u8_1: [u8; 1] = [0_u8];
+        let mut off_u8_8: [u8; 8] = [0_u8; 8];
+        let mut k_off_u8_8: [u8; 8] = [0_u8; 8];
+        let mut len_u8_8: [u8; 8] = [0_u8; 8];
+        fidx_u8_1.clone_from_slice(fdix_u8);
+        off_u8_8.clone_from_slice(off_u8);
+        k_off_u8_8.clone_from_slice(k_off_u8);
+        len_u8_8.clone_from_slice(len_u8);
+        let fidx = u8::from_be_bytes(fidx_u8_1);
+        let off = u64::from_be_bytes(off_u8_8);
+        let k_off = u64::from_be_bytes(k_off_u8_8);
+        let len = u64::from_be_bytes(len_u8_8);
         (fidx, off, k_off, len)
     }
 }
+
+/*
+impl std::cmp::Ord for File{
+    fn cmp(&self, other: &Self) -> Ordering {
+        unimplemented!()
+    }
+
+    fn max(self, other: Self) -> Self where Self: Sized {
+        unimplemented!()
+    }
+
+    fn min(self, other: Self) -> Self where Self: Sized {
+        unimplemented!()
+    }
+
+    fn clamp(self, min: Self, max: Self) -> Self where Self: Sized {
+        unimplemented!()
+    }
+}
+*/

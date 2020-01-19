@@ -16,7 +16,9 @@ impl KV {
             kv_store,
             cpt_store,
         };
-        thread::spawn(|| {&kv.gc();});
+        thread::spawn(|| {
+            &kv.gc();
+        });
         kv
     }
 
@@ -41,12 +43,8 @@ impl KV {
     #[inline]
     fn gc(&self) {
         match self.kv_store.read_all_meta() {
-            Ok(metadata) => {
-
-            }
-            Err(e) => {
-
-            }
+            Ok(metadata) => {}
+            Err(e) => {}
         };
     }
 }
