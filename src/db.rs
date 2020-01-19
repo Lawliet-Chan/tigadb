@@ -1,4 +1,4 @@
-use crate::art::{ArtNodeType, ArtTree, Node};
+use crate::art::ArtTree;
 use crate::kv::KV;
 use crate::option::Option;
 use std::sync::atomic::AtomicUsize;

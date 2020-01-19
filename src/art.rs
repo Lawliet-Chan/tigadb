@@ -5,8 +5,6 @@ use core::arch::x86_64::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm
 use core::arch::x86::{_mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8};
 
 use crate::art::ArtNodeType::{Node16, Node256, Node4, Node48};
-use core::slice::SliceIndex;
-use std::fs::create_dir_all;
 use std::u32;
 
 const NODE4MIN: usize = 2;
@@ -155,14 +153,20 @@ impl Node {
                     let bit_field = _mm_movemask_epi8(cmp) & (mask as i32);
                     if bit_field > 0 {
                         let u32_bit_field = bit_field as u32;
-                        Some(u32_bit_field.trailing_zeros())
+                        Some(u32_bit_field.trailing_zeros() as usize)
                     } else {
                         None
                     }
                 }
             },
 
-            ArtNodeType::Node48 => self.keys.get(k),
+            ArtNodeType::Node48 => {
+                if let Some(key) = self.keys.get(k as usize) {
+                    Some(*key as usize)
+                } else {
+                    None
+                }
+            }
 
             ArtNodeType::Node256 => Some(k as usize),
         }
@@ -198,7 +202,7 @@ impl Node {
             ArtNodeType::Node4 => {
                 let mut idx = 0;
                 for idx in 0..size {
-                    if key < self.keys.get(idx) {
+                    if key < *self.keys.get(idx).unwrap() {
                         break;
                     }
                 }
@@ -222,12 +226,12 @@ impl Node {
             ArtNodeType::Node48 => {
                 // size as u8 is safe
                 // because the most is 255. When size is 256, it turns grow().
-                self.set_key(key, size as u8);
+                self.set_key(key as usize, size as u8);
                 self.children.push(node);
             }
 
             ArtNodeType::Node256 => {
-                self.set_child(key, node);
+                self.set_child(key as usize, node);
             }
         }
     }
@@ -287,7 +291,7 @@ impl Node {
                             }
                         }
                         new_node.set_child(idx, *child);
-                        new_node.set_key(self.keys.get(i), (idx + 1) as u8);
+                        new_node.set_key(*self.keys.get(i).unwrap() as usize, (idx + 1) as u8);
                     }
                 }
                 *self = new_node;
@@ -315,20 +319,20 @@ impl Node {
         match &self.typ {
             ArtNodeType::Node16 => {
                 self.typ = Node4;
-                self.keys.shrink_to(NODE4KEYS);
-                self.children.shrink_to(NODE4MAX);
+                self.keys.truncate(NODE4KEYS);
+                self.children.truncate(NODE4MAX);
             }
 
             ArtNodeType::Node48 => {
                 self.typ = Node16;
-                self.keys.shrink_to(NODE16KEYS);
-                self.children.shrink_to(NODE16MAX);
+                self.keys.truncate(NODE16KEYS);
+                self.children.truncate(NODE16MAX);
             }
 
             ArtNodeType::Node256 => {
                 self.typ = Node48;
                 self.keys.reserve_exact(NODE48KEYS);
-                self.children.shrink_to(NODE48MAX);
+                self.children.truncate(NODE48MAX);
             }
 
             _ => {}
@@ -336,20 +340,14 @@ impl Node {
     }
 
     #[inline]
-    fn set_key<I>(&mut self, i: I, key: u8)
-    where
-        I: SliceIndex<Self>,
-    {
+    fn set_key(&mut self, i: usize, key: u8) {
         if let Some(k) = self.keys.get_mut(i) {
             *k = key;
         }
     }
 
     #[inline]
-    fn set_child<I>(&mut self, i: I, child: Node)
-    where
-        I: SliceIndex<Self>,
-    {
+    fn set_child(&mut self, i: usize, child: Node) {
         if let Some(ch) = self.children.get_mut(i) {
             *ch = child;
         }

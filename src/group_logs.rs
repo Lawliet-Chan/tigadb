@@ -2,7 +2,6 @@ use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::path::Path;
 use std::{u64, u8};
 
 use std::cmp::Ordering;
@@ -243,22 +242,35 @@ impl GroupLog {
     }
 }
 
-/*
-impl std::cmp::Ord for File{
+impl std::cmp::Ord for File {
     fn cmp(&self, other: &Self) -> Ordering {
         unimplemented!()
     }
 
-    fn max(self, other: Self) -> Self where Self: Sized {
+    fn max(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
         unimplemented!()
     }
 
-    fn min(self, other: Self) -> Self where Self: Sized {
+    fn min(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
         unimplemented!()
     }
 
-    fn clamp(self, min: Self, max: Self) -> Self where Self: Sized {
+    fn clamp(self, min: Self, max: Self) -> Self
+    where
+        Self: Sized,
+    {
         unimplemented!()
     }
 }
-*/
+
+fn file_suffix_to_usize(fname: &str) -> usize {
+    let names: Vec<_> = fname.split(".").collect();
+    let num_str = names.last().unwrap();
+    num_str.parse::<usize>().unwrap()
+}
