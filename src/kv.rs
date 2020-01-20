@@ -16,9 +16,7 @@ impl KV {
             kv_store,
             cpt_store,
         };
-        thread::spawn(|| {
-            &kv.gc();
-        });
+        //thread::spawn(|| { &kv.gc(); });
         kv
     }
 

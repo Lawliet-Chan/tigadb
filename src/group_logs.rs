@@ -4,7 +4,6 @@ use std::io;
 use std::io::prelude::*;
 use std::{u64, u8};
 
-use std::cmp::Ordering;
 #[cfg(target_os = "unix")]
 use std::os::unix::prelude::*;
 #[cfg(target_os = "windows")]
@@ -42,24 +41,23 @@ impl GroupLog {
             if p.is_file() {
                 if p.file_name().unwrap().to_str().unwrap().contains("data") {
                     // data_files
-                    let df = File::create(p).expect(
+                    let df = File::create(&p).expect(
                         format!("recover data file {} error", p.to_str().unwrap()).as_str(),
                     );
                     data_files.push(df);
                 } else if p.file_name().unwrap().to_str().unwrap().contains("meta") {
                     // meta_files
-                    let cf = File::create(p).expect(
+                    let cf = File::create(&p).expect(
                         format!("recover meta file {} error", p.to_str().unwrap()).as_str(),
                     );
                     meta_files.push(cf);
                 }
             }
         }
-        data_files.sort();
+
         let d_idx = data_files.len();
         let d_len = data_files.last().unwrap().metadata().unwrap().len();
 
-        meta_files.sort();
         let m_idx = meta_files.len();
         let m_len = meta_files.last().unwrap().metadata().unwrap().len();
 
@@ -89,21 +87,24 @@ impl GroupLog {
     #[inline]
     pub(crate) fn append_meta(&mut self, meta: (u8, u64, u64, u64), fsync: bool) -> io::Result<()> {
         let meta_u8 = Self::meta_to_bytes(meta);
-        let mut f: &File;
-        if self.mfw_idx_len.1 + meta_u8.len() as u64 <= self.limit_per_file
+        let f = if self.mfw_idx_len.1 + meta_u8.len() as u64 <= self.limit_per_file
             && self.mfw_idx_len.0 > 0
         {
-            f = self
+            let f1 = self
                 .meta_files
                 .get_mut(self.mfw_idx_len.0)
                 .ok_or(io::Error::new(
                     io::ErrorKind::Other,
                     "Writing: find no meta file",
                 ))?;
+            f1
         } else {
-            f = &File::create(format!("{}/meta.{}", self.dir, self.mfw_idx_len.0 + 1).as_str())?;
-        }
-        let len = f.write(meta_u8.as_slice())?;
+            let f2 = &mut File::create(
+                format!("{}/meta.{}", self.dir, self.mfw_idx_len.0 + 1).as_str(),
+            )?;
+            f2
+        };
+        f.write(meta_u8.as_slice())?;
         if fsync {
             f.sync_all()?;
         }
@@ -113,20 +114,25 @@ impl GroupLog {
     // (u8, u64, u64) = (value_file_index, value_offset, value_length)
     #[inline]
     pub(crate) fn append_data(&mut self, data: &[u8], fsync: bool) -> io::Result<(u8, u64, u64)> {
-        let mut f: &File;
-        if self.dfw_idx_len.1 + data.len() as u64 <= self.limit_per_file && self.dfw_idx_len.0 > 0 {
-            f = self
+        let f = if self.dfw_idx_len.1 + data.len() as u64 <= self.limit_per_file
+            && self.dfw_idx_len.0 > 0
+        {
+            let f1 = self
                 .data_files
                 .get_mut(self.dfw_idx_len.0)
                 .ok_or(io::Error::new(
                     io::ErrorKind::Other,
                     "writing: find no data file",
                 ))?;
+            f1
         } else {
-            f = &File::create(format!("{}/data.{}", self.dir, self.dfw_idx_len.0 + 1).as_str())?;
+            let f2 = &mut File::create(
+                format!("{}/data.{}", self.dir, self.dfw_idx_len.0 + 1).as_str(),
+            )?;
             self.dfw_idx_len.0 += 1;
             self.dfw_idx_len.1 = 0;
-        }
+            f2
+        };
         let len = f.write(data)?;
         if fsync {
             f.sync_all()?;
@@ -240,37 +246,4 @@ impl GroupLog {
         let len = u64::from_be_bytes(len_u8_8);
         (fidx, off, k_off, len)
     }
-}
-
-impl std::cmp::Ord for File {
-    fn cmp(&self, other: &Self) -> Ordering {
-        unimplemented!()
-    }
-
-    fn max(self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
-
-    fn min(self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
-
-    fn clamp(self, min: Self, max: Self) -> Self
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
-}
-
-fn file_suffix_to_usize(fname: &str) -> usize {
-    let names: Vec<_> = fname.split(".").collect();
-    let num_str = names.last().unwrap();
-    num_str.parse::<usize>().unwrap()
 }

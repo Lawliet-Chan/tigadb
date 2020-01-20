@@ -1,3 +1,4 @@
+#[derive(Copy, Clone)]
 pub struct Option {
     pub fsync: bool,
     pub limit_per_file: u64,

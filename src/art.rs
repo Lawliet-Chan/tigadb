@@ -39,17 +39,17 @@ impl<'a> Default for ArtTree<'a> {
 impl<'a> ArtTree<'a> {
     #[inline]
     pub(crate) fn insert(&mut self, key: Vec<u8>, value_pos: (u8, u64, u64)) {
-        self.insert_with_depth(self.root, key, value_pos, 0)
+        self.insert_with_depth(self.root, key, value_pos, &mut 0)
     }
 
     #[inline]
     pub(crate) fn get(&self, key: Vec<u8>) -> Option<(u8, u64, u64)> {
-        self.get_with_depth(self.root, key, 0)
+        self.get_with_depth(self.root, key, &mut 0)
     }
 
     #[inline]
     pub(crate) fn remove(&mut self, key: Vec<u8>) {
-        self.remove_with_depth(self.root, key, 0)
+        self.remove_with_depth(self.root, key, &mut 0)
     }
 
     #[inline]
@@ -58,9 +58,9 @@ impl<'a> ArtTree<'a> {
         node: Option<&Node>,
         key: Vec<u8>,
         value_pos: (u8, u64, u64),
-        depth: usize,
+        depth: &mut usize,
     ) {
-        depth += 1;
+        *depth += 1;
         self.insert_with_depth(node, key, value_pos, depth)
     }
 
@@ -69,15 +69,15 @@ impl<'a> ArtTree<'a> {
         &self,
         node: Option<&Node>,
         key: Vec<u8>,
-        depth: usize,
+        depth: &mut usize,
     ) -> Option<(u8, u64, u64)> {
-        depth += 1;
+        *depth += 1;
         self.get_with_depth(node, key, depth)
     }
 
     #[inline]
-    fn remove_with_depth(&mut self, node: Option<&Node>, key: Vec<u8>, depth: usize) {
-        depth += 1;
+    fn remove_with_depth(&mut self, node: Option<&Node>, key: Vec<u8>, depth: &mut usize) {
+        *depth += 1;
         self.remove_with_depth(node, key, depth)
     }
 }
@@ -200,7 +200,7 @@ impl Node {
         let size = self.get_child_size();
         match &self.typ {
             ArtNodeType::Node4 => {
-                let mut idx = 0;
+                let idx = 0;
                 for idx in 0..size {
                     if key < *self.keys.get(idx).unwrap() {
                         break;
