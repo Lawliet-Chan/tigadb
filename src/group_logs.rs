@@ -87,23 +87,23 @@ impl GroupLog {
     #[inline]
     pub(crate) fn append_meta(&mut self, meta: (u8, u64, u64, u64), fsync: bool) -> io::Result<()> {
         let meta_u8 = Self::meta_to_bytes(meta);
-        let f = if self.mfw_idx_len.1 + meta_u8.len() as u64 <= self.limit_per_file
-            && self.mfw_idx_len.0 > 0
+        if self.mfw_idx_len.1 + meta_u8.len() as u64 > self.limit_per_file
+            || self.mfw_idx_len.0 == 0
         {
-            let f1 = self
-                .meta_files
-                .get_mut(self.mfw_idx_len.0)
-                .ok_or(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Writing: find no meta file",
-                ))?;
-            f1
-        } else {
-            let f2 = &mut File::create(
-                format!("{}/meta.{}", self.dir, self.mfw_idx_len.0 + 1).as_str(),
-            )?;
-            f2
-        };
+            let f = File::create(format!("{}/meta.{}", self.dir, self.mfw_idx_len.0 + 1).as_str())?;
+            self.data_files.push(f);
+            self.mfw_idx_len.0 += 1;
+            self.mfw_idx_len.1 = 0;
+        }
+
+        let f = self
+            .meta_files
+            .get_mut(self.mfw_idx_len.0)
+            .ok_or(io::Error::new(
+                io::ErrorKind::Other,
+                "Writing: find no meta file",
+            ))?;
+
         f.write(meta_u8.as_slice())?;
         if fsync {
             f.sync_all()?;
@@ -114,25 +114,21 @@ impl GroupLog {
     // (u8, u64, u64) = (value_file_index, value_offset, value_length)
     #[inline]
     pub(crate) fn append_data(&mut self, data: &[u8], fsync: bool) -> io::Result<(u8, u64, u64)> {
-        let f = if self.dfw_idx_len.1 + data.len() as u64 <= self.limit_per_file
-            && self.dfw_idx_len.0 > 0
-        {
-            let f1 = self
-                .data_files
-                .get_mut(self.dfw_idx_len.0)
-                .ok_or(io::Error::new(
-                    io::ErrorKind::Other,
-                    "writing: find no data file",
-                ))?;
-            f1
-        } else {
-            let f2 = &mut File::create(
-                format!("{}/data.{}", self.dir, self.dfw_idx_len.0 + 1).as_str(),
-            )?;
+        if self.dfw_idx_len.1 + data.len() as u64 > self.limit_per_file || self.dfw_idx_len.0 == 0 {
+            let f = File::create(format!("{}/data.{}", self.dir, self.dfw_idx_len.0 + 1).as_str())?;
+            self.data_files.push(f);
             self.dfw_idx_len.0 += 1;
             self.dfw_idx_len.1 = 0;
-            f2
-        };
+        }
+
+        let f = self
+            .data_files
+            .get_mut(self.dfw_idx_len.0)
+            .ok_or(io::Error::new(
+                io::ErrorKind::Other,
+                "writing: find no data file",
+            ))?;
+
         let len = f.write(data)?;
         if fsync {
             f.sync_all()?;
