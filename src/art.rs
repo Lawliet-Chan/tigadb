@@ -82,7 +82,7 @@ impl<'a> ArtTree<'a> {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub(crate) enum ArtNodeType {
     // key 4
     // children 4
@@ -100,6 +100,7 @@ pub(crate) enum ArtNodeType {
     Node256,
 }
 
+#[derive(Clone)]
 pub(crate) struct Node {
     typ: ArtNodeType,
     keys: Vec<u8>,
@@ -210,7 +211,7 @@ impl Node {
                 for i in size..idx {
                     if *self.keys.get(i - 1).unwrap() > key {
                         self.set_key(i, *self.keys.get(i - 1).unwrap());
-                        self.set_child(i, *self.children.get(i - 1).unwrap());
+                        self.set_child(i, self.children.get(i - 1).unwrap().clone());
                     }
                 }
 
@@ -290,7 +291,7 @@ impl Node {
                                 break;
                             }
                         }
-                        new_node.set_child(idx, *child);
+                        new_node.set_child(idx, child.clone());
                         new_node.set_key(*self.keys.get(i).unwrap() as usize, (idx + 1) as u8);
                     }
                 }
@@ -302,7 +303,7 @@ impl Node {
                 let ksize = self.get_keys_size();
                 for i in 0..ksize {
                     if let Some(child) = self.find_child(i as u8) {
-                        new_node.set_child(i, *child);
+                        new_node.set_child(i, child.clone());
                     }
                 }
                 *self = new_node;
