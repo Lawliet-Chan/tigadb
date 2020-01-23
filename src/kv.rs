@@ -1,5 +1,6 @@
 use crate::group_logs::GroupLog;
 use std::io;
+use std::sync::{Arc, RwLock};
 use std::thread;
 
 pub(crate) struct KV {
@@ -9,14 +10,21 @@ pub(crate) struct KV {
 
 impl KV {
     #[inline]
-    pub(crate) fn new(kv_dir: &'static str, cpt_dir: &'static str, limit_per_file: u64) -> Self {
+    pub(crate) fn new(
+        kv_dir: &'static str,
+        cpt_dir: &'static str,
+        limit_per_file: u64,
+    ) -> Arc<RwLock<Self>> {
         let kv_store = GroupLog::new(kv_dir, limit_per_file);
         let cpt_store = GroupLog::new(cpt_dir, limit_per_file);
-        let kv = KV {
+        let kv = Arc::new(RwLock::new(KV {
             kv_store,
             cpt_store,
-        };
-        //thread::spawn(|| { &kv.gc(); });
+        }));
+        let kv_gc = kv.clone();
+
+        // TODO: should use async lib.
+        thread::spawn(move || kv_gc.read().unwrap().gc());
         kv
     }
 

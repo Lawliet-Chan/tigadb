@@ -2,7 +2,7 @@ use crate::art::ArtTree;
 use crate::kv::KV;
 use crate::option::Option;
 use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 pub struct DB<'a> {
@@ -28,7 +28,7 @@ pub struct DB<'a> {
     key_cache: Arc<Vec<u8>>,
 
     tree: ArtTree<'a>,
-    disk: KV,
+    disk: Arc<RwLock<KV>>,
 }
 
 impl<'a> DB<'a> {
