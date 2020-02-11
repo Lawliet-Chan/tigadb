@@ -3,6 +3,8 @@ use std::io;
 use std::sync::{Arc, RwLock};
 use std::thread;
 
+pub const METADATA_LENGTH: usize = 25;
+
 pub(crate) struct KV {
     kv_store: GroupLog,
     cpt_store: GroupLog,
@@ -46,11 +48,4 @@ impl KV {
         self.kv_store.append_meta(kv_pos, fsync)
     }
 
-    #[inline]
-    fn gc(&self) {
-        match self.kv_store.read_all_meta() {
-            Ok(metadata) => {}
-            Err(e) => {}
-        };
-    }
 }
