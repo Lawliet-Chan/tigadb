@@ -47,5 +47,4 @@ impl KV {
     pub(crate) fn commit(&mut self, kv_pos: (u8, u64, u64, u64), fsync: bool) -> io::Result<()> {
         self.kv_store.append_meta(kv_pos, fsync)
     }
-
 }
