@@ -3,4 +3,3 @@ pub mod db;
 pub mod kv;
 pub mod option;
 pub mod storage;
-pub mod wal;

@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::fs::File;
 use std::io;
@@ -16,30 +16,30 @@ const MAX_BLOCK_ID: usize = u32::max_value();
 
 pub(crate) struct Storage {
     kv_pos: Vec<u8>,
+    // store kv_pos
     meta_file: File,
 
     data_file: File,
+
+    wal_file: File,
 
     // start_block_id --> blocks
     pending_blocks_start: BTreeMap<BlockId, Blocks>,
     // end_block_id --> blocks
     pending_blocks_end: BTreeMap<BlockId, Blocks>,
+
     pending_blocks_set: BTreeSet<Blocks>,
 }
 
 impl Storage {
-    pub(crate) fn new(data_fpath: &'static str, meta_fpath: &'static str) -> Self {
-        let meta_file = if Path::new(meta_fpath).exists() {
-            File::open(meta_fpath).expect(format!("open meta file {} error", meta_fpath).as_str())
-        } else {
-            File::create(meta_fpath).expect(format!("open meta file {} error", meta_fpath).as_str())
-        };
-
-        let data_file = if Path::new(data_fpath).exists() {
-            File::open(data_fpath).expect(format!("open data file {} error", data_fpath).as_str())
-        } else {
-            File::create(data_fpath).expect(format!("open data file {} error", data_fpath).as_str())
-        };
+    pub(crate) fn new(
+        data_fpath: &'static str,
+        meta_fpath: &'static str,
+        wal_fpath: &'static str,
+    ) -> Self {
+        let meta_file = Self::open_or_create_file(meta_fpath);
+        let data_file = Self::open_or_create_file(data_fpath);
+        let wal_file = Self::open_or_create_file(wal_fpath);
 
         let kv_pos = Vec::new();
         let pending_blocks_set = BTreeSet::new();
@@ -50,9 +50,18 @@ impl Storage {
             kv_pos,
             meta_file,
             data_file,
+            wal_file,
             pending_blocks_start,
             pending_blocks_end,
             pending_blocks_set,
+        }
+    }
+
+    fn open_or_create_file(fpath: &'static str) -> File {
+        if Path::new(fpath).exists() {
+            File::open(fpath).expect(format!("open file {} error", fpath).as_str())
+        } else {
+            File::create(fpath).expect(format!("create file {} error", fpath).as_str())
         }
     }
 
@@ -62,17 +71,15 @@ impl Storage {
         read_at(&self.data_file, offset, len)
     }
 
-    pub(crate) fn write_kv(&mut self, multi_data: Vec<Vec<u8>>) -> io::Result<()> {
+    pub(crate) fn write_kv(&mut self, multi_data: Vec<Vec<u8>>) -> io::Result<()> {}
 
-    }
+    pub(crate) fn write_meta(&mut self, multi_meta: Vec<KVpos>) -> io::Result<()> {}
 
-    pub(crate) fn write_meta(&mut self, multi_meta: Vec<KVpos>) -> io::Result<()> {
+    pub(crate) fn delete_kv(&mut self, kv_pos: KVpos) -> io::Result<()> {}
 
-    }
+    pub(crate) fn append_wal(&mut self, multi_data: Vec<Vec<u8>>) -> io::Result<()> {}
 
-    pub(crate) fn delete_kv(&mut self, kv_pos: KVpos) -> io::Result<()> {
-
-    }
+    pub(crate) fn truncate_wal(&mut self, offset: usize) -> io::Result<()> {}
 
     fn insert_pending_blocks(&mut self, blocks: &mut Blocks) {
         let first = blocks.first_block_id();
@@ -107,6 +114,12 @@ impl Storage {
         self.pending_blocks_start.remove(&blocks.first_block_id());
         self.pending_blocks_end.remove(&blocks.last_block_id());
     }
+}
+
+pub(crate) struct KVpos {
+    blocks: Blocks,
+    value_pos: u16,
+    kv_size: u16,
 }
 
 type BlockId = u32;
@@ -153,20 +166,6 @@ impl Ord for Blocks {
     fn cmp(&self, other: &Self) -> Ordering {
         self.block_count.cmp(&other.block_count)
     }
-}
-
-impl Ord for (BlockId, BlockId) {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let sum = self.0 + self.1;
-        let other_sum = other.0 + other.1;
-        sum.cmp(&other_sum)
-    }
-}
-
-pub(crate) struct KVpos {
-    blocks: Blocks,
-    value_pos: u16,
-    kv_size: u16,
 }
 
 fn read_at(file: &File, offset: u64, len: usize) -> io::Result<Vec<u8>> {
