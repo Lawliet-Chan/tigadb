@@ -1,5 +1,4 @@
 use crate::art::ArtTree;
-use crate::kv::KV;
 use crate::option::Option;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, RwLock};
@@ -28,7 +27,7 @@ pub struct DB<'a> {
     key_cache: Arc<Vec<u8>>,
 
     tree: ArtTree<'a>,
-    disk: Arc<RwLock<KV>>,
+    //disk: Arc<RwLock<KV>>,
 }
 
 impl<'a> DB<'a> {
@@ -40,7 +39,7 @@ impl<'a> DB<'a> {
             commit_ts: now,
             key_cache: Arc::new(Vec::new()),
             apply_ts: now,
-            disk: KV::new(opt.meta_dir, opt.kv_dir, opt.limit_per_file),
+            //disk: KV::new(opt.meta_dir, opt.kv_dir, opt.limit_per_file),
             tree: ArtTree::default(),
         }
     }
