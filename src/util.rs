@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::os::unix::fs::FileExt;
 use std::path::Path;
 use std::{io, u8};
 
@@ -12,29 +13,12 @@ pub(crate) fn open_or_create_file(fpath: &'static str) -> File {
 
 pub(crate) fn read_at(file: &File, offset: u64, len: usize) -> io::Result<Vec<u8>> {
     let buf = &mut Vec::with_capacity(len);
-    #[cfg(target_os = "unix")]
-    {
-        file.read_at(buf, offset)
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        file.seek_read(buf, offset)
-    }
+    file.read_at(buf, offset)?;
     Ok(buf.to_vec())
 }
 
-pub(crate) fn write_at(file: &mut File, buf: &mut [u8], offset: u64) -> io::Result<()> {
-    #[cfg(target_os = "unix")]
-    {
-        file.write_at(buf, offset)
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        file.seek_write(buf, offset)
-    }
-    Ok(())
+pub(crate) fn write_at(file: &mut File, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+    file.write_at(buf, offset)
 }
 
 pub(crate) fn bytes_to_u8(data: Vec<u8>) -> u8 {
