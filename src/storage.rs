@@ -61,15 +61,13 @@ impl Storage {
     fn insert_pending_blocks(&mut self, blocks: &mut Blocks) {
         let first = blocks.first_block_id();
         let last = blocks.last_block_id();
-        if let Some(pblocks) = self.pending_blocks_end.get(&(first - 1)) {
-            blocks.merge_to_head(pblocks);
-            self.pending_blocks_end.remove(&(first - 1));
-            self.pending_blocks_set.remove(pblocks);
+        if let Some(pblocks) = self.pending_blocks_end.remove(&(first - 1)) {
+            blocks.merge_to_head(&pblocks);
+            self.pending_blocks_set.remove(&pblocks);
         }
-        if let Some(pblocks) = self.pending_blocks_start.get(&(last + 1)) {
-            blocks.merge_to_tail(pblocks);
-            self.pending_blocks_start.remove(&(last + 1));
-            self.pending_blocks_set.remove(pblocks);
+        if let Some(pblocks) = self.pending_blocks_start.remove(&(last + 1)) {
+            blocks.merge_to_tail(&pblocks);
+            self.pending_blocks_set.remove(&pblocks);
         }
         self.pending_blocks_set.insert(blocks.clone());
         self.pending_blocks_start
