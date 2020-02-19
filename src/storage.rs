@@ -80,10 +80,13 @@ impl Storage {
 
     fn take_pending_blocks(&mut self, data_size: usize) -> Option<&Blocks> {
         let needed_blocks = data_size / BLOCK_SIZE;
-        let range_blocks = self
-            .pending_blocks_set
-            .range((Included(needed_blocks), Included(MAX_KV_SIZE)));
-        range_blocks.min()
+        let mut it = self.pending_blocks_set.iter();
+        while let Some(pending_blocks) = it.next() {
+            if pending_blocks.count() >= needed_blocks as u8 {
+                return Some(pending_blocks)
+            }
+        }
+        None
     }
 
     fn remove_pending_blocks(&mut self, blocks: Blocks) {
