@@ -92,6 +92,15 @@ impl Storage {
         self.insert_chink_blocks(old_blocks, USED)
     }
 
+    pub(crate) fn update_min_blocks_id_can_use(
+        &mut self,
+        blocks_count: BlockId,
+    ) -> io::Result<usize> {
+        self.min_blocks_id_can_use += blocks_count;
+        let mut min_blocks_id_bytes = u32_to_bytes(self.min_blocks_id_can_use);
+        write_at(&mut self.meta_file, min_blocks_id_bytes.as_mut_slice(), 0)
+    }
+
     fn alloc_blocks(&mut self, needed_blocks: BlocksLen) -> Option<Blocks> {
         let chink_blocks = self.take_free_chink_blocks(needed_blocks);
         if let Some(blocks) = chink_blocks {
