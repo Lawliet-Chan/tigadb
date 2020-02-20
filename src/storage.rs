@@ -26,9 +26,10 @@ pub(crate) struct Storage {
     chink_blocks_start: BTreeMap<BlockId, Blocks>,
     // end_block_id --> blocks
     chink_blocks_end: BTreeMap<BlockId, Blocks>,
-    // the bool True means that blocks can be read or written directly.
-    // False means that kv data which in this blocks is written into other blocks BUT NOT COMMITTED yet.
-    chink_blocks: BTreeMap<Blocks, bool>,
+    // The BlocksState:
+    // FREE means that blocks can be read or written directly.
+    // USED means that kv data which in this blocks is written into other blocks BUT NOT COMMITTED yet.
+    chink_blocks: BTreeMap<Blocks, BlocksState>,
 }
 
 impl Storage {
@@ -70,7 +71,7 @@ impl Storage {
         }
         if let Some(blocks) = self.alloc_blocks(needed_blocks as BlocksLen) {
             if let Some(ob) = old_blocks {
-                self.insert_chink_blocks(ob, false);
+                self.insert_chink_blocks(ob, USED);
             }
             write_at(
                 &mut self.data_file,
@@ -88,7 +89,7 @@ impl Storage {
     }
 
     pub(crate) fn delete_kv(&mut self, old_blocks: &mut Blocks) {
-        self.insert_chink_blocks(old_blocks, false)
+        self.insert_chink_blocks(old_blocks, USED)
     }
 
     fn alloc_blocks(&mut self, needed_blocks: BlocksLen) -> Option<Blocks> {
@@ -106,7 +107,7 @@ impl Storage {
     }
 
     // When update or delete KV, disk will make chink blocks.
-    fn insert_chink_blocks(&mut self, blocks: &mut Blocks, is_free: bool) {
+    fn insert_chink_blocks(&mut self, blocks: &mut Blocks, blocks_state: BlocksState) {
         let first = blocks.first_block_id();
         let last = blocks.last_block_id();
         if let Some(pblocks) = self.chink_blocks_end.remove(&(first - 1)) {
@@ -117,7 +118,7 @@ impl Storage {
             blocks.merge_to_tail(&pblocks);
             self.chink_blocks.remove(&pblocks);
         }
-        self.chink_blocks.insert(blocks.clone(), is_free);
+        self.chink_blocks.insert(blocks.clone(), blocks_state);
         self.chink_blocks_start
             .insert(blocks.first_block_id(), blocks.clone());
         self.chink_blocks_end
@@ -127,7 +128,7 @@ impl Storage {
     fn take_free_chink_blocks(&self, needed_blocks: BlocksLen) -> Option<&Blocks> {
         let mut it = self.chink_blocks.iter();
         while let Some(chink_blocks) = it.next() {
-            if chink_blocks.0.count() >= needed_blocks && *chink_blocks.1 {
+            if chink_blocks.0.count() >= needed_blocks && *chink_blocks.1 == FREE {
                 return Some(chink_blocks.0);
             }
         }
@@ -142,13 +143,13 @@ impl Storage {
 
     fn use_blocks(&mut self, blocks: &Blocks) {
         if let Some(status) = self.chink_blocks.get_mut(blocks) {
-            *status = false;
+            *status = USED;
         }
     }
 
     fn release_blocks(&mut self, blocks: &Blocks) {
         if let Some(status) = self.chink_blocks.get_mut(blocks) {
-            *status = true;
+            *status = FREE;
         }
     }
 }
@@ -238,3 +239,8 @@ impl Ord for Blocks {
         self.block_count.cmp(&other.block_count)
     }
 }
+
+type BlocksState = u8;
+
+const FREE: BlocksState = 0;
+const USED: BlocksState = 1;
