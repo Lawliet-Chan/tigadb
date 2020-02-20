@@ -1,4 +1,4 @@
-use crate::util::{open_or_create_file, read_at};
+use crate::util::{open_or_create_file, read_at, write_at};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
@@ -9,6 +9,7 @@ use std::u8;
 
 const MAX_KV_SIZE: usize = BLOCK_SIZE as usize * u8::max_value() as usize;
 const MAX_BLOCK_ID: BlockId = u32::max_value();
+const BLOCKS_MAX_COUNT: BlocksLen = u8::max_value();
 
 pub(crate) struct Storage {
     kv_pos: Vec<u8>,
@@ -55,11 +56,37 @@ impl Storage {
         read_at(&self.data_file, offset, len)
     }
 
-    //pub(crate) fn write_kv(&mut self, multi_data: Vec<Vec<u8>>) -> io::Result<()> {}
+    pub(crate) fn write_kv(
+        &mut self,
+        data: &mut Vec<u8>,
+        old_blocks: Option<&mut Blocks>,
+    ) -> io::Result<usize> {
+        let needed_blocks = data.len() / BLOCK_SIZE;
+        if needed_blocks > BLOCKS_MAX_COUNT as usize {
+            return Err(io::Error::new(io::ErrorKind::Other, "kv data is too large"));
+        }
+        if let Some(blocks) = self.alloc_blocks(needed_blocks as BlocksLen) {
+            if let Some(ob) = old_blocks {
+                self.insert_chink_blocks(ob, false);
+            }
+            write_at(
+                &mut self.data_file,
+                data.as_mut_slice(),
+                blocks.first_block_id() as u64 * BLOCK_SIZE as u64,
+            )
+        } else {
+            Err(io::Error::new(io::ErrorKind::Other, "disk use up"))
+        }
+    }
 
-    //pub(crate) fn write_meta(&mut self, multi_meta: Vec<KVpos>) -> io::Result<()> {}
+    pub(crate) fn write_meta(&mut self, meta_data: KVpos, offset: u64) -> io::Result<usize> {
+        let mut meta_data_bytes = meta_data.to_bytes();
+        write_at(&mut self.meta_file, meta_data_bytes.as_mut_slice(), offset)
+    }
 
-    //pub(crate) fn delete_kv(&mut self, kv_pos: KVpos) -> io::Result<()> {}
+    pub(crate) fn delete_kv(&mut self, old_blocks: &mut Blocks) {
+        self.insert_chink_blocks(old_blocks, false)
+    }
 
     fn alloc_blocks(&mut self, needed_blocks: BlocksLen) -> Option<Blocks> {
         let chink_blocks = self.take_free_chink_blocks(needed_blocks);
@@ -76,7 +103,7 @@ impl Storage {
     }
 
     // When update or delete KV, disk will make chink blocks.
-    fn insert_chink_blocks(&mut self, blocks: &mut Blocks) {
+    fn insert_chink_blocks(&mut self, blocks: &mut Blocks, is_free: bool) {
         let first = blocks.first_block_id();
         let last = blocks.last_block_id();
         if let Some(pblocks) = self.chink_blocks_end.remove(&(first - 1)) {
@@ -87,7 +114,7 @@ impl Storage {
             blocks.merge_to_tail(&pblocks);
             self.chink_blocks.remove(&pblocks);
         }
-        self.chink_blocks.insert(blocks.clone(), true);
+        self.chink_blocks.insert(blocks.clone(), is_free);
         self.chink_blocks_start
             .insert(blocks.first_block_id(), blocks.clone());
         self.chink_blocks_end
@@ -109,6 +136,18 @@ impl Storage {
         self.chink_blocks_start.remove(&blocks.first_block_id());
         self.chink_blocks_end.remove(&blocks.last_block_id());
     }
+
+    fn use_blocks(&mut self, blocks: &Blocks) {
+        if let Some(status) = self.chink_blocks.get_mut(blocks) {
+            *status = false;
+        }
+    }
+
+    fn release_blocks(&mut self, blocks: &Blocks) {
+        if let Some(status) = self.chink_blocks.get_mut(blocks) {
+            *status = true;
+        }
+    }
 }
 
 const KV_POS_SIZE: usize = 9;
@@ -119,6 +158,15 @@ pub(crate) struct KVpos {
     kv_size: u16,
 }
 
+impl KVpos {
+    fn to_bytes(&self) -> Vec<u8> {
+        let data = Vec::new();
+        data
+    }
+
+    //fn to_kvpos(data: Vec<u8>) -> Self{}
+}
+
 const BLOCK_SIZE: usize = 512;
 
 type BlockId = u32;
@@ -126,7 +174,7 @@ type BlocksLen = u8;
 
 // consecutive blocks
 #[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
-struct Blocks {
+pub(crate) struct Blocks {
     start_block_id: BlockId,
     block_count: BlocksLen,
 }
