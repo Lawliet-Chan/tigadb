@@ -8,21 +8,23 @@ use std::u32;
 use std::u8;
 
 const MAX_KV_SIZE: usize = BLOCK_SIZE as usize * u8::max_value() as usize;
-const MAX_BLOCK_ID: usize = u32::max_value() as usize;
+const MAX_BLOCK_ID: BlockId = u32::max_value();
 
 pub(crate) struct Storage {
     kv_pos: Vec<u8>,
     // store kv_pos
     meta_file: File,
 
+    min_blocks_id_can_use: BlockId,
     data_file: File,
 
     // start_block_id --> blocks
-    pending_blocks_start: BTreeMap<BlockId, Blocks>,
+    chink_blocks_start: BTreeMap<BlockId, Blocks>,
     // end_block_id --> blocks
-    pending_blocks_end: BTreeMap<BlockId, Blocks>,
-
-    pending_blocks_set: BTreeSet<Blocks>,
+    chink_blocks_end: BTreeMap<BlockId, Blocks>,
+    // the bool True means that blocks can be read or written directly.
+    // False means that kv data which in this blocks is written into other blocks BUT NOT COMMITTED yet.
+    chink_blocks: BTreeMap<Blocks, bool>,
 }
 
 impl Storage {
@@ -31,17 +33,18 @@ impl Storage {
         let data_file = open_or_create_file(data_fpath);
 
         let kv_pos = Vec::new();
-        let pending_blocks_set = BTreeSet::new();
-        let pending_blocks_start = BTreeMap::new();
-        let pending_blocks_end = BTreeMap::new();
+        let chink_blocks = BTreeMap::new();
+        let chink_blocks_start = BTreeMap::new();
+        let chink_blocks_end = BTreeMap::new();
 
         Self {
             kv_pos,
             meta_file,
+            min_blocks_id_can_use: 0,
             data_file,
-            pending_blocks_start,
-            pending_blocks_end,
-            pending_blocks_set,
+            chink_blocks_start,
+            chink_blocks_end,
+            chink_blocks,
         }
     }
 
@@ -58,39 +61,53 @@ impl Storage {
 
     //pub(crate) fn delete_kv(&mut self, kv_pos: KVpos) -> io::Result<()> {}
 
-    fn insert_pending_blocks(&mut self, blocks: &mut Blocks) {
+    fn alloc_blocks(&mut self, needed_blocks: BlocksLen) -> Option<Blocks> {
+        let chink_blocks = self.take_free_chink_blocks(needed_blocks);
+        if let Some(blocks) = chink_blocks {
+            Some(*blocks)
+        } else {
+            if needed_blocks as BlockId + self.min_blocks_id_can_use > MAX_BLOCK_ID {
+                return None;
+            }
+            let new_blocks = Blocks::new(self.min_blocks_id_can_use, needed_blocks);
+            // self.min_blocks_id_can_use += needed_blocks as BlockId;
+            Some(new_blocks)
+        }
+    }
+
+    // When update or delete KV, disk will make chink blocks.
+    fn insert_chink_blocks(&mut self, blocks: &mut Blocks) {
         let first = blocks.first_block_id();
         let last = blocks.last_block_id();
-        if let Some(pblocks) = self.pending_blocks_end.remove(&(first - 1)) {
+        if let Some(pblocks) = self.chink_blocks_end.remove(&(first - 1)) {
             blocks.merge_to_head(&pblocks);
-            self.pending_blocks_set.remove(&pblocks);
+            self.chink_blocks.remove(&pblocks);
         }
-        if let Some(pblocks) = self.pending_blocks_start.remove(&(last + 1)) {
+        if let Some(pblocks) = self.chink_blocks_start.remove(&(last + 1)) {
             blocks.merge_to_tail(&pblocks);
-            self.pending_blocks_set.remove(&pblocks);
+            self.chink_blocks.remove(&pblocks);
         }
-        self.pending_blocks_set.insert(blocks.clone());
-        self.pending_blocks_start
+        self.chink_blocks.insert(blocks.clone(), true);
+        self.chink_blocks_start
             .insert(blocks.first_block_id(), blocks.clone());
-        self.pending_blocks_end
+        self.chink_blocks_end
             .insert(blocks.last_block_id(), blocks.to_owned());
     }
 
-    fn take_pending_blocks(&mut self, data_size: usize) -> Option<&Blocks> {
-        let needed_blocks = data_size / BLOCK_SIZE;
-        let mut it = self.pending_blocks_set.iter();
-        while let Some(pending_blocks) = it.next() {
-            if pending_blocks.count() >= needed_blocks as u8 {
-                return Some(pending_blocks)
+    fn take_free_chink_blocks(&self, needed_blocks: BlocksLen) -> Option<&Blocks> {
+        let mut it = self.chink_blocks.iter();
+        while let Some(chink_blocks) = it.next() {
+            if chink_blocks.0.count() >= needed_blocks && *chink_blocks.1 {
+                return Some(chink_blocks.0);
             }
         }
         None
     }
 
-    fn remove_pending_blocks(&mut self, blocks: Blocks) {
-        self.pending_blocks_set.remove(&blocks);
-        self.pending_blocks_start.remove(&blocks.first_block_id());
-        self.pending_blocks_end.remove(&blocks.last_block_id());
+    fn remove_chink_blocks(&mut self, blocks: Blocks) {
+        self.chink_blocks.remove(&blocks);
+        self.chink_blocks_start.remove(&blocks.first_block_id());
+        self.chink_blocks_end.remove(&blocks.last_block_id());
     }
 }
 
@@ -108,17 +125,17 @@ type BlockId = u32;
 type BlocksLen = u8;
 
 // consecutive blocks
-#[derive(Clone, Eq, PartialOrd, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
 struct Blocks {
     start_block_id: BlockId,
     block_count: BlocksLen,
 }
 
 impl Blocks {
-    fn new(start_block_id: BlockId) -> Self {
+    fn new(start_block_id: BlockId, block_count: BlocksLen) -> Self {
         Self {
             start_block_id,
-            block_count: 0,
+            block_count,
         }
     }
 
