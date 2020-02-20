@@ -1,4 +1,7 @@
-use crate::util::{open_or_create_file, read_at, write_at};
+use crate::util::{
+    bytes_to_u16, bytes_to_u32, bytes_to_u8, open_or_create_file, read_at, u16_to_bytes,
+    u32_to_bytes, u8_to_bytes, write_at,
+};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
@@ -160,11 +163,32 @@ pub(crate) struct KVpos {
 
 impl KVpos {
     fn to_bytes(&self) -> Vec<u8> {
-        let data = Vec::new();
+        let mut data = Vec::new();
+        let blocks_id_bytes = &mut u32_to_bytes(self.blocks.start_block_id);
+        let block_count_bytes = &mut u8_to_bytes(self.blocks.block_count);
+        let value_pos_bytes = &mut u16_to_bytes(self.value_pos);
+        let kv_size_bytes = &mut u16_to_bytes(self.kv_size);
+        data.append(blocks_id_bytes);
+        data.append(block_count_bytes);
+        data.append(value_pos_bytes);
+        data.append(kv_size_bytes);
         data
     }
 
-    //fn to_kvpos(data: Vec<u8>) -> Self{}
+    fn to_kvpos(data: Vec<u8>) -> Self {
+        let (blocks_id_bytes, left3) = data.split_at(4);
+        let (block_count_bytes, left2) = data.split_at(1);
+        let (value_pos_bytes, kv_size_bytes) = data.split_at(2);
+        let blocks_id = bytes_to_u32(blocks_id_bytes);
+        let block_count = bytes_to_u8(block_count_bytes);
+        let value_pos = bytes_to_u16(value_pos_bytes);
+        let kv_size = bytes_to_u16(kv_size_bytes);
+        Self {
+            blocks: Blocks::new(blocks_id, block_count),
+            value_pos,
+            kv_size,
+        }
+    }
 }
 
 const BLOCK_SIZE: usize = 512;

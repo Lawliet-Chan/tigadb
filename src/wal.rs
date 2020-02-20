@@ -16,8 +16,8 @@ impl Wal {
             .expect(format!("read FileStatus from {} error", f1).as_str());
         let f2_status_bytes = read_at(&log_file_2, 0, 1)
             .expect(format!("read FileStatus from {} error", f2).as_str());
-        let f1_stat = bytes_to_u8(f1_status_bytes);
-        let f2_stat = bytes_to_u8(f2_status_bytes);
+        let f1_stat = bytes_to_u8(f1_status_bytes.as_slice());
+        let f2_stat = bytes_to_u8(f2_status_bytes.as_slice());
         let writing_file;
         if f1_stat == WRITING {
             writing_file = 0
