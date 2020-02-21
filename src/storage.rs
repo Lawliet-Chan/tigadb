@@ -2,10 +2,12 @@ use crate::util::{
     bytes_to_u16, bytes_to_u32, bytes_to_u8, open_or_create_file, read_at, u16_to_bytes,
     u32_to_bytes, u8_to_bytes, write_at,
 };
+use std::borrow::BorrowMut;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
 use std::io;
+use std::io::Read;
 use std::ops::Bound::Included;
 use std::u32;
 use std::u8;
@@ -14,9 +16,11 @@ const MAX_KV_SIZE: usize = BLOCK_SIZE as usize * u8::max_value() as usize;
 const MAX_BLOCK_ID: BlockId = u32::max_value();
 const BLOCKS_MAX_COUNT: BlocksLen = u8::max_value();
 
+const SIZE_OF_BLOCK_ID: usize = 4; // BlockID is u32.
+
 pub(crate) struct Storage {
     // kv_pos hashmap : map<KVpos, offset in meta_file>
-    kv_pos: HashMap<KVpos, u64>,
+    kv_pos_map: HashMap<KVpos, u64>,
     meta_file: File,
 
     min_blocks_id_can_use: BlockId,
@@ -34,18 +38,38 @@ pub(crate) struct Storage {
 
 impl Storage {
     pub(crate) fn new(data_fpath: &'static str, meta_fpath: &'static str) -> Self {
-        let meta_file = open_or_create_file(meta_fpath);
+        let mut meta_file = open_or_create_file(meta_fpath);
         let data_file = open_or_create_file(data_fpath);
 
-        let kv_pos = HashMap::new();
+        let mut kv_pos_map = HashMap::new();
         let chink_blocks = BTreeMap::new();
         let chink_blocks_start = BTreeMap::new();
         let chink_blocks_end = BTreeMap::new();
+        let mut min_blocks_id_can_use = 0;
+
+        let meta_data_bytes: &mut Vec<u8> = &mut Vec::new();
+        meta_file
+            .read_to_end(meta_data_bytes)
+            .expect("read meta file error");
+
+        if !meta_data_bytes.is_empty() {
+            let (min_blocks_id_can_use_bytes, all_kv_pos_bytes) =
+                meta_data_bytes.split_at(SIZE_OF_BLOCK_ID);
+            min_blocks_id_can_use = bytes_to_u32(min_blocks_id_can_use_bytes);
+
+            let mut iter = all_kv_pos_bytes.chunks(KV_POS_SIZE);
+            let mut offset = SIZE_OF_BLOCK_ID as u64;
+            while let Some(kv_pos_bytes) = iter.next() {
+                let kv_pos = KVpos::to_kvpos(kv_pos_bytes.to_owned().borrow_mut());
+                kv_pos_map.insert(kv_pos, offset);
+                offset += KV_POS_SIZE as u64;
+            }
+        }
 
         Self {
-            kv_pos,
+            kv_pos_map,
             meta_file,
-            min_blocks_id_can_use: 0,
+            min_blocks_id_can_use,
             data_file,
             chink_blocks_start,
             chink_blocks_end,
@@ -90,7 +114,7 @@ impl Storage {
         old_meta_data: Option<KVpos>,
     ) -> io::Result<usize> {
         let mut offset;
-        if let Some(off) = self.kv_pos.get(&meta_data) {
+        if let Some(off) = self.kv_pos_map.get(&meta_data) {
             offset = *off;
         } else {
             offset = self.meta_file.metadata()?.len();
@@ -160,15 +184,9 @@ impl Storage {
         self.chink_blocks_end.remove(&blocks.last_block_id());
     }
 
-    fn use_blocks(&mut self, blocks: &Blocks) {
-        if let Some(status) = self.chink_blocks.get_mut(blocks) {
-            *status = USED;
-        }
-    }
-
-    fn release_blocks(&mut self, blocks: &Blocks) {
-        if let Some(status) = self.chink_blocks.get_mut(blocks) {
-            *status = FREE;
+    pub(crate) fn set_blocks_state(&mut self, blocks: &Blocks, blocks_state: BlocksState) {
+        if let Some(state) = self.chink_blocks.get_mut(blocks) {
+            *state = blocks_state;
         }
     }
 }
@@ -196,7 +214,8 @@ impl KVpos {
         data
     }
 
-    fn to_kvpos(data: Vec<u8>) -> Self {
+    // the data length MUST be KV_POS_SIZE.
+    fn to_kvpos(data: &mut [u8]) -> Self {
         let (blocks_id_bytes, left3) = data.split_at(4);
         let (block_count_bytes, left2) = data.split_at(1);
         let (value_pos_bytes, kv_size_bytes) = data.split_at(2);
