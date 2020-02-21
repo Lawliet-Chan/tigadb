@@ -3,7 +3,7 @@ use crate::util::{
     u32_to_bytes, u8_to_bytes, write_at,
 };
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
 use std::io;
 use std::ops::Bound::Included;
@@ -15,8 +15,8 @@ const MAX_BLOCK_ID: BlockId = u32::max_value();
 const BLOCKS_MAX_COUNT: BlocksLen = u8::max_value();
 
 pub(crate) struct Storage {
-    kv_pos: Vec<u8>,
-    // store kv_pos
+    // kv_pos hashmap : map<KVpos, offset in meta_file>
+    kv_pos: HashMap<KVpos, u64>,
     meta_file: File,
 
     min_blocks_id_can_use: BlockId,
@@ -37,7 +37,7 @@ impl Storage {
         let meta_file = open_or_create_file(meta_fpath);
         let data_file = open_or_create_file(data_fpath);
 
-        let kv_pos = Vec::new();
+        let kv_pos = HashMap::new();
         let chink_blocks = BTreeMap::new();
         let chink_blocks_start = BTreeMap::new();
         let chink_blocks_end = BTreeMap::new();
@@ -64,7 +64,7 @@ impl Storage {
         &mut self,
         data: &mut Vec<u8>,
         old_blocks: Option<&mut Blocks>,
-    ) -> io::Result<usize> {
+    ) -> io::Result<Blocks> {
         let needed_blocks = data.len() / BLOCK_SIZE;
         if needed_blocks > BLOCKS_MAX_COUNT as usize {
             return Err(io::Error::new(io::ErrorKind::Other, "kv data is too large"));
@@ -77,13 +77,24 @@ impl Storage {
                 &mut self.data_file,
                 data.as_mut_slice(),
                 blocks.first_block_id() as u64 * BLOCK_SIZE as u64,
-            )
+            )?;
+            Ok(blocks)
         } else {
             Err(io::Error::new(io::ErrorKind::Other, "disk use up"))
         }
     }
 
-    pub(crate) fn write_meta(&mut self, meta_data: KVpos, offset: u64) -> io::Result<usize> {
+    pub(crate) fn write_meta(
+        &mut self,
+        meta_data: KVpos,
+        old_meta_data: Option<KVpos>,
+    ) -> io::Result<usize> {
+        let mut offset;
+        if let Some(off) = self.kv_pos.get(&meta_data) {
+            offset = *off;
+        } else {
+            offset = self.meta_file.metadata()?.len();
+        }
         let mut meta_data_bytes = meta_data.to_bytes();
         write_at(&mut self.meta_file, meta_data_bytes.as_mut_slice(), offset)
     }
@@ -110,7 +121,6 @@ impl Storage {
                 return None;
             }
             let new_blocks = Blocks::new(self.min_blocks_id_can_use, needed_blocks);
-            // self.min_blocks_id_can_use += needed_blocks as BlockId;
             Some(new_blocks)
         }
     }
@@ -165,6 +175,7 @@ impl Storage {
 
 const KV_POS_SIZE: usize = 9;
 
+#[derive(Eq, PartialEq, Hash)]
 pub(crate) struct KVpos {
     blocks: Blocks,
     value_pos: u16,
@@ -207,7 +218,7 @@ type BlockId = u32;
 type BlocksLen = u8;
 
 // consecutive blocks
-#[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
+#[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug, Hash)]
 pub(crate) struct Blocks {
     start_block_id: BlockId,
     block_count: BlocksLen,
