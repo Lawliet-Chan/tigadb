@@ -1,10 +1,12 @@
-use crate::util::{bytes_to_u8, open_or_create_file, read_at, write_at};
+use crate::storage::KVpos;
+use crate::util::{bytes_to_u8, open_or_create_file, read_at, u64_to_bytes, write_at};
 use std::fs::File;
 use std::io;
+use std::io::Write;
 
 pub(crate) struct Wal {
     writing_file: usize,
-    log_files: (File, File),
+    log_files: [File; 2],
     max_size_per_file: usize,
 }
 
@@ -31,12 +33,40 @@ impl Wal {
 
         Wal {
             writing_file,
-            log_files: (log_file_1, log_file_2),
+            log_files: [log_file_1, log_file_2],
             max_size_per_file,
         }
     }
 
-    //pub(crate) fn append_data(&mut self) -> io::Result<()> {}
+    pub(crate) fn append_wal(
+        &mut self,
+        multi_old_kvpos: Vec<KVpos>,
+        mut data: Vec<u8>,
+        fsync: bool,
+    ) -> io::Result<()> {
+        let mut old_kvpos_bytes = Vec::new();
+        let mut iter = multi_old_kvpos.iter();
+        while let Some(old_kvpos) = iter.next() {
+            let mut bytes = old_kvpos.to_bytes();
+            old_kvpos_bytes.append(&mut bytes);
+        }
+        let old_kvpos_bytes_len = old_kvpos_bytes.len() as u64;
+        let data_len = data.len() as u64;
+        let mut bytes_to_append = Vec::new();
+        bytes_to_append.append(&mut u64_to_bytes(old_kvpos_bytes_len));
+        bytes_to_append.append(&mut u64_to_bytes(data_len));
+        bytes_to_append.append(&mut old_kvpos_bytes);
+        bytes_to_append.append(&mut data);
+        self.log_files[self.writing_file].write_all(bytes_to_append.as_slice())?;
+        if fsync {
+            self.log_files[self.writing_file].sync_all()?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn truncate_wal(&mut self) -> io::Result<()> {
+        self.log_files[self.writing_file].set_len(0)
+    }
 }
 
 type FileStatus = u8;

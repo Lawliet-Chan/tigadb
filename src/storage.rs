@@ -201,30 +201,26 @@ pub(crate) struct KVpos {
 }
 
 impl KVpos {
-    fn to_bytes(&self) -> Vec<u8> {
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
         let mut data = Vec::new();
-        let blocks_id_bytes = &mut u32_to_bytes(self.blocks.start_block_id);
-        let block_count_bytes = &mut u8_to_bytes(self.blocks.block_count);
+        let mut blocks_bytes = self.blocks.to_bytes();
         let value_pos_bytes = &mut u16_to_bytes(self.value_pos);
         let kv_size_bytes = &mut u16_to_bytes(self.kv_size);
-        data.append(blocks_id_bytes);
-        data.append(block_count_bytes);
+        data.append(&mut blocks_bytes);
         data.append(value_pos_bytes);
         data.append(kv_size_bytes);
         data
     }
 
     // the data length MUST be KV_POS_SIZE.
-    fn to_kvpos(data: &mut [u8]) -> Self {
-        let (blocks_id_bytes, left3) = data.split_at(4);
-        let (block_count_bytes, left2) = data.split_at(1);
-        let (value_pos_bytes, kv_size_bytes) = data.split_at(2);
-        let blocks_id = bytes_to_u32(blocks_id_bytes);
-        let block_count = bytes_to_u8(block_count_bytes);
+    pub(crate) fn to_kvpos(data: &mut [u8]) -> Self {
+        let (blocks_bytes, left) = data.split_at(SIZE_OF_BLOCKS_STRUCT);
+        let (value_pos_bytes, kv_size_bytes) = left.split_at(2);
+        let blocks = Blocks::to_Blocks(blocks_bytes.to_owned().borrow_mut());
         let value_pos = bytes_to_u16(value_pos_bytes);
         let kv_size = bytes_to_u16(kv_size_bytes);
         Self {
-            blocks: Blocks::new(blocks_id, block_count),
+            blocks,
             value_pos,
             kv_size,
         }
@@ -232,6 +228,7 @@ impl KVpos {
 }
 
 const BLOCK_SIZE: usize = 512;
+const SIZE_OF_BLOCKS_STRUCT: usize = 5; // block id is u32, block count is u8
 
 type BlockId = u32;
 type BlocksLen = u8;

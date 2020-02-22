@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::os::unix::fs::FileExt;
 use std::path::Path;
-use std::{io, u16, u32, u8};
+use std::{io, u16, u32, u64, u8};
 
 pub(crate) fn open_or_create_file(fpath: &'static str) -> File {
     if Path::new(fpath).exists() {
@@ -52,4 +52,15 @@ pub(crate) fn bytes_to_u32(data: &[u8]) -> u32 {
 pub(crate) fn u32_to_bytes(u: u32) -> Vec<u8> {
     let u8_4: [u8; 4] = u.to_be_bytes();
     u8_4.to_vec()
+}
+
+pub(crate) fn bytes_to_u64(data: &[u8]) -> u64 {
+    let mut u8_8: [u8; 8] = [0_u8; 8];
+    u8_8.clone_from_slice(data);
+    u64::from_be_bytes(u8_8)
+}
+
+pub(crate) fn u64_to_bytes(u: u64) -> Vec<u8> {
+    let u8_8: [u8; 8] = u.to_be_bytes();
+    u8_8.to_vec()
 }
