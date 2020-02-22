@@ -271,6 +271,25 @@ impl Blocks {
         self.start_block_id = blocks.start_block_id;
         self.block_count += blocks.block_count;
     }
+
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
+        let mut data = Vec::new();
+        let start_block_id_bytes = &mut u32_to_bytes(self.start_block_id);
+        let block_count_bytes = &mut u8_to_bytes(self.block_count);
+        data.append(start_block_id_bytes);
+        data.append(block_count_bytes);
+        data
+    }
+
+    pub(crate) fn to_Blocks(data: &mut [u8]) -> Self {
+        let (start_block_id_bytes, block_count_bytes) = data.split_at(SIZE_OF_BLOCK_ID);
+        let start_block_id = bytes_to_u32(start_block_id_bytes);
+        let block_count = bytes_to_u8(block_count_bytes);
+        Self {
+            start_block_id,
+            block_count,
+        }
+    }
 }
 
 impl Ord for Blocks {
