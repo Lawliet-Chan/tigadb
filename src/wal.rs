@@ -111,9 +111,16 @@ impl LogFile {
                 .expect(format!("read state from log_file {} error", fpath).as_str());
             state = bytes_to_u8(state_bytes.as_slice());
         }
-        let checkpoint_bytes_offset = file_len - SIZE_OF_CHECKPOINT as u64;
-        let checkpoint_bytes = read_at(&file, checkpoint_bytes_offset, SIZE_OF_CHECKPOINT).unwrap();
-        let checkpoint = bytes_to_u64(checkpoint_bytes.as_slice());
+        let mut checkpoint;
+        if file_len < SIZE_OF_CHECKPOINT as u64 {
+            checkpoint = 0;
+        } else {
+            let checkpoint_bytes_offset = file_len - SIZE_OF_CHECKPOINT as u64;
+            let checkpoint_bytes =
+                read_at(&file, checkpoint_bytes_offset, SIZE_OF_CHECKPOINT).unwrap();
+            checkpoint = bytes_to_u64(checkpoint_bytes.as_slice());
+        }
+
         (Self { checkpoint, file }, state)
     }
 
@@ -135,6 +142,7 @@ impl LogFile {
 
     fn truncate(&mut self) {
         self.file.set_len(SIZE_OF_FILE_STATE as u64);
+        self.checkpoint = 0;
     }
 
     fn set_writing_state(&mut self) -> io::Result<usize> {
