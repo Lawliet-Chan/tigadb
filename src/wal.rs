@@ -1,3 +1,7 @@
+
+/*
+  The wal is hold on  and the development pause.
+*/
 use crate::storage::KVpos;
 use crate::util::{
     bytes_to_u64, bytes_to_u8, open_or_create_file, read_at, u64_to_bytes, write_at,
@@ -33,6 +37,23 @@ impl Wal {
             read_only_file: rf,
             max_size_per_file,
         }
+    }
+
+    pub(crate) fn recover(&mut self, checkpoint: u64) -> io::Result<Vec<(Vec<KVpos>, Vec<u8>)>> {
+        let mut result = Vec::new();
+        let wf_checkpoint = self.writing_file.get_checkpoint();
+        let rf_checkpoint = self.read_only_file.get_checkpoint();
+        if checkpoint == wf_checkpoint {
+            return Ok(result);
+        }
+        if checkpoint < rf_checkpoint {
+            let mut rf_result = self.read_only_file.recover(checkpoint)?;
+            result.append(&mut rf_result);
+        }
+        let mut wf_result = self.writing_file.recover(checkpoint)?;
+        result.append(&mut wf_result);
+
+        Ok(result)
     }
 
     pub(crate) fn append_wal(
@@ -93,6 +114,7 @@ const SIZE_OF_FILE_STATE: usize = 1; // Filestate type is u8.
 const SIZE_OF_CHECKPOINT: usize = 8; // Checkpoint type is u64.
 
 struct LogFile {
+    // The last checkpoint in this log file.
     checkpoint: u64,
     file: File,
 }
@@ -134,6 +156,18 @@ impl LogFile {
         Ok(())
     }
 
+    fn recover(&mut self, checkpoint: u64) -> io::Result<Vec<(Vec<KVpos>, Vec<u8>)>> {
+        let result = Vec::new();
+        let mut file_data = self.read_all()?.split_off(SIZE_OF_FILE_STATE);
+
+        let (old_kvpos_len_bytes, left) = file_data.split_at(8);
+        let (data_len_bytes, left2) = left.split_at(8);
+        let old_kvpos_len = bytes_to_u64(old_kvpos_len_bytes);
+        let data_len = bytes_to_u64(data_len_bytes);
+
+        Ok(result)
+    }
+
     fn read_all(&mut self) -> io::Result<Vec<u8>> {
         let mut data = Vec::new();
         self.file.read_to_end(&mut data)?;
@@ -143,6 +177,10 @@ impl LogFile {
     fn truncate(&mut self) {
         self.file.set_len(SIZE_OF_FILE_STATE as u64);
         self.checkpoint = 0;
+    }
+
+    fn get_checkpoint(&self) -> u64 {
+        self.checkpoint
     }
 
     fn set_writing_state(&mut self) -> io::Result<usize> {
@@ -158,3 +196,39 @@ impl LogFile {
         Ok(metadata.len())
     }
 }
+
+pub(crate) struct BatchOps{
+    undo: Vec<KVpos>,
+    ops: Vec<Ops>,
+}
+
+impl BatchOps{
+    pub(crate) fn encode(&self) -> Vec<u8>{
+
+    }
+
+    pub(crate) fn decode(data: Vec<u8>) -> Self{
+
+    }
+}
+
+type Operate = u8;
+const INSERT: Operate = 0;
+const DELETE: Operate = 1;
+
+pub(crate) struct Ops{
+    op: Operate,
+    kvs: Vec<KVlen>,
+}
+
+impl Ops{
+    pub(crate) fn encode(&self) -> Vec<u8>{
+
+    }
+
+    pub(crate) fn decode(data: Vec<u8>) -> Self{
+
+    }
+}
+
+pub(crate) struct KVlen(usize,usize);
