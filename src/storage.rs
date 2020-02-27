@@ -4,11 +4,10 @@ use crate::util::{
 };
 use std::borrow::BorrowMut;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io;
 use std::io::Read;
-use std::ops::Bound::Included;
 use std::u32;
 use std::u8;
 
@@ -60,7 +59,7 @@ impl Storage {
             let mut iter = all_kv_pos_bytes.chunks(KV_POS_SIZE);
             let mut offset = SIZE_OF_BLOCK_ID as u64;
             while let Some(kv_pos_bytes) = iter.next() {
-                let kv_pos = KVpos::to_kvpos(kv_pos_bytes.to_owned().borrow_mut());
+                let kv_pos = KVpos::decode(kv_pos_bytes.to_owned().borrow_mut());
                 kv_pos_map.insert(kv_pos, offset);
                 offset += KV_POS_SIZE as u64;
             }
@@ -119,7 +118,7 @@ impl Storage {
         } else {
             offset = self.meta_file.metadata()?.len();
         }
-        let mut meta_data_bytes = meta_data.to_bytes();
+        let mut meta_data_bytes = meta_dataencode(();
         write_at(&mut self.meta_file, meta_data_bytes.as_mut_slice(), offset)
     }
 
@@ -201,9 +200,9 @@ pub(crate) struct KVpos {
 }
 
 impl KVpos {
-    pub(crate) fn to_bytes(&self) -> Vec<u8> {
+    pub(crate) fn encode(&self) -> Vec<u8> {
         let mut data = Vec::new();
-        let mut blocks_bytes = self.blocks.to_bytes();
+        let mut blocks_bytes = self.blocksencode(();
         let value_pos_bytes = &mut u16_to_bytes(self.value_pos);
         let kv_size_bytes = &mut u16_to_bytes(self.kv_size);
         data.append(&mut blocks_bytes);
@@ -213,10 +212,10 @@ impl KVpos {
     }
 
     // the data length MUST be KV_POS_SIZE.
-    pub(crate) fn to_kvpos(data: &mut [u8]) -> Self {
+    pub(crate) fn decode(data: &mut [u8]) -> Self {
         let (blocks_bytes, left) = data.split_at(SIZE_OF_BLOCKS_STRUCT);
         let (value_pos_bytes, kv_size_bytes) = left.split_at(2);
-        let blocks = Blocks::to_Blocks(blocks_bytes.to_owned().borrow_mut());
+        let blocks = Blocks::decode(blocks_bytes.to_owned().borrow_mut());
         let value_pos = bytes_to_u16(value_pos_bytes);
         let kv_size = bytes_to_u16(kv_size_bytes);
         Self {
@@ -269,7 +268,7 @@ impl Blocks {
         self.block_count += blocks.block_count;
     }
 
-    pub(crate) fn to_bytes(&self) -> Vec<u8> {
+    pub(crate) fn encode(&self) -> Vec<u8> {
         let mut data = Vec::new();
         let start_block_id_bytes = &mut u32_to_bytes(self.start_block_id);
         let block_count_bytes = &mut u8_to_bytes(self.block_count);
@@ -278,7 +277,7 @@ impl Blocks {
         data
     }
 
-    pub(crate) fn to_Blocks(data: &mut [u8]) -> Self {
+    pub(crate) fn decode(data: &mut [u8]) -> Self {
         let (start_block_id_bytes, block_count_bytes) = data.split_at(SIZE_OF_BLOCK_ID);
         let start_block_id = bytes_to_u32(start_block_id_bytes);
         let block_count = bytes_to_u8(block_count_bytes);

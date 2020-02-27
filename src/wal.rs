@@ -39,18 +39,18 @@ impl Wal {
         }
     }
 
-    pub(crate) fn recover(&mut self, checkpoint: u64) -> io::Result<Vec<(Vec<KVpos>, Vec<u8>)>> {
+    pub(crate) fn recover(&mut self, last_ckpt: u64) -> io::Result<Vec<(Vec<KVpos>, Vec<u8>)>> {
         let mut result = Vec::new();
-        let wf_checkpoint = self.writing_file.get_checkpoint();
-        let rf_checkpoint = self.read_only_file.get_checkpoint();
-        if checkpoint == wf_checkpoint {
+        let wf_last_ckpt = self.writing_file.get_last_ckpt();
+        let rf_last_ckpt = self.read_only_file.get_last_ckpt();
+        if last_ckpt == wf_last_ckpt {
             return Ok(result);
         }
-        if checkpoint < rf_checkpoint {
-            let mut rf_result = self.read_only_file.recover(checkpoint)?;
+        if last_ckpt < rf_last_ckpt {
+            let mut rf_result = self.read_only_file.recover(last_ckpt)?;
             result.append(&mut rf_result);
         }
-        let mut wf_result = self.writing_file.recover(checkpoint)?;
+        let mut wf_result = self.writing_file.recover(last_ckpt)?;
         result.append(&mut wf_result);
 
         Ok(result)
@@ -58,43 +58,25 @@ impl Wal {
 
     pub(crate) fn append_wal(
         &mut self,
-        multi_old_kvpos: Vec<KVpos>,
-        mut data: Vec<u8>,
-        checkpoint: u64,
+        batch_op: BatchOp,
+        last_ckpt: u64,
         fsync: bool,
     ) -> io::Result<()> {
-        self.try_truncate_wal(checkpoint);
-        let bytes_to_append = Self::to_bytes(multi_old_kvpos, data);
+        self.try_truncate_wal(last_ckpt);
+        let bytes_to_append = batch_op.encode();
         let writing_file_len = self.writing_file.len()?;
         if bytes_to_append.len() as u64 + writing_file_len > self.max_size_per_file {
             self.switch_log_files();
         }
         self.writing_file
-            .append_file(bytes_to_append, checkpoint, fsync)
+            .append_file(bytes_to_append, last_ckpt, fsync)
     }
 
-    fn try_truncate_wal(&mut self, checkpoint: u64) {
-        if self.read_only_file.checkpoint <= checkpoint {
+    fn try_truncate_wal(&mut self, last_ckpt: u64) {
+        if self.read_only_file.last_ckpt <= last_ckpt {
             // This place should spawn a thread to execute it.
             self.read_only_file.truncate();
         }
-    }
-
-    fn to_bytes(multi_old_kvpos: Vec<KVpos>, mut data: Vec<u8>) -> Vec<u8> {
-        let mut old_kvpos_bytes = Vec::new();
-        let mut iter = multi_old_kvpos.iter();
-        while let Some(old_kvpos) = iter.next() {
-            let mut bytes = old_kvpos.to_bytes();
-            old_kvpos_bytes.append(&mut bytes);
-        }
-        let old_kvpos_bytes_len = old_kvpos_bytes.len() as u64;
-        let data_len = data.len() as u64;
-        let mut bytes_to_append = Vec::new();
-        bytes_to_append.append(&mut u64_to_bytes(old_kvpos_bytes_len));
-        bytes_to_append.append(&mut u64_to_bytes(data_len));
-        bytes_to_append.append(&mut old_kvpos_bytes);
-        bytes_to_append.append(&mut data);
-        bytes_to_append
     }
 
     fn switch_log_files(&mut self) -> io::Result<usize> {
@@ -111,11 +93,11 @@ const READ_ONLY: Filestate = 0;
 const WRITING: Filestate = 1;
 
 const SIZE_OF_FILE_STATE: usize = 1; // Filestate type is u8.
-const SIZE_OF_CHECKPOINT: usize = 8; // Checkpoint type is u64.
+const SIZE_OF_CKPT: usize = 8; // checkpoint type is u64.
 
 struct LogFile {
-    // The last checkpoint in this log file.
-    checkpoint: u64,
+    // The last last_ckpt in this log file.
+    last_ckpt: u64,
     file: File,
 }
 
@@ -133,30 +115,30 @@ impl LogFile {
                 .expect(format!("read state from log_file {} error", fpath).as_str());
             state = bytes_to_u8(state_bytes.as_slice());
         }
-        let mut checkpoint;
-        if file_len < SIZE_OF_CHECKPOINT as u64 {
-            checkpoint = 0;
+        let mut last_ckpt;
+        if file_len < SIZE_OF_CKPT as u64 {
+            last_ckpt = 0;
         } else {
-            let checkpoint_bytes_offset = file_len - SIZE_OF_CHECKPOINT as u64;
-            let checkpoint_bytes =
-                read_at(&file, checkpoint_bytes_offset, SIZE_OF_CHECKPOINT).unwrap();
-            checkpoint = bytes_to_u64(checkpoint_bytes.as_slice());
+            let last_ckpt_bytes_offset = file_len - SIZE_OF_CKPT as u64;
+            let last_ckpt_bytes =
+                read_at(&file, last_ckpt_bytes_offset, SIZE_OF_CKPT).unwrap();
+            last_ckpt = bytes_to_u64(last_ckpt_bytes.as_slice());
         }
 
-        (Self { checkpoint, file }, state)
+        (Self { last_ckpt, file }, state)
     }
 
-    fn append_file(&mut self, mut data: Vec<u8>, checkpoint: u64, fsync: bool) -> io::Result<()> {
-        data.append(&mut u64_to_bytes(checkpoint));
+    fn append_file(&mut self, mut data: Vec<u8>, last_ckpt: u64, fsync: bool) -> io::Result<()> {
+        data.append(&mut u64_to_bytes(last_ckpt));
         self.file.write_all(data.as_mut_slice())?;
         if fsync {
             self.file.sync_all()?;
         }
-        self.checkpoint = checkpoint;
+        self.last_ckpt = last_ckpt;
         Ok(())
     }
 
-    fn recover(&mut self, checkpoint: u64) -> io::Result<Vec<(Vec<KVpos>, Vec<u8>)>> {
+    fn recover(&mut self, last_ckpt: u64) -> io::Result<Vec<(Vec<KVpos>, Vec<u8>)>> {
         let result = Vec::new();
         let mut file_data = self.read_all()?.split_off(SIZE_OF_FILE_STATE);
 
@@ -176,11 +158,11 @@ impl LogFile {
 
     fn truncate(&mut self) {
         self.file.set_len(SIZE_OF_FILE_STATE as u64);
-        self.checkpoint = 0;
+        self.last_ckpt = 0;
     }
 
-    fn get_checkpoint(&self) -> u64 {
-        self.checkpoint
+    fn get_last_ckpt(&self) -> u64 {
+        self.last_ckpt
     }
 
     fn set_writing_state(&mut self) -> io::Result<usize> {
@@ -197,14 +179,24 @@ impl LogFile {
     }
 }
 
+pub(crate) struct AllOps(Vec<BatchOps>);
+
 pub(crate) struct BatchOps{
-    undo: Vec<KVpos>,
+    lsn: u64,
     ops: Vec<Ops>,
+    undo: u64,
+    checkpoint: u64,
 }
 
 impl BatchOps{
     pub(crate) fn encode(&self) -> Vec<u8>{
-
+        let mut data = Vec::new();
+        let mut iter = self.ops.iter();
+        while let Some(ops) = iter.next() {
+            let ops_bytes = ops.encode();
+            data.append(bop_bytes);
+        }
+        data
     }
 
     pub(crate) fn decode(data: Vec<u8>) -> Self{
@@ -218,7 +210,7 @@ const DELETE: Operate = 1;
 
 pub(crate) struct Ops{
     op: Operate,
-    kvs: Vec<KVlen>,
+    kv: KVpair,
 }
 
 impl Ops{
@@ -231,4 +223,26 @@ impl Ops{
     }
 }
 
-pub(crate) struct KVlen(usize,usize);
+pub struct KVpair{
+    key: Vec<u8>,
+    value: Vec<u8>
+}
+
+/*
+   fn to_bytes(multi_old_kvpos: Vec<KVpos>, mut data: Vec<u8>) -> Vec<u8> {
+        let mut old_kvpos_bytes = Vec::new();
+        let mut iter = multi_old_kvpos.iter();
+        while let Some(old_kvpos) = iter.next() {
+            let mut bytes = old_kvpos.to_bytes();
+            old_kvpos_bytes.append(&mut bytes);
+        }
+        let old_kvpos_bytes_len = old_kvpos_bytes.len() as u64;
+        let data_len = data.len() as u64;
+        let mut bytes_to_append = Vec::new();
+        bytes_to_append.append(&mut u64_to_bytes(old_kvpos_bytes_len));
+        bytes_to_append.append(&mut u64_to_bytes(data_len));
+        bytes_to_append.append(&mut old_kvpos_bytes);
+        bytes_to_append.append(&mut data);
+        bytes_to_append
+    }
+*/
