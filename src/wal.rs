@@ -182,7 +182,7 @@ impl LogFile {
 pub(crate) struct AllOps(Vec<BatchOps>);
 
 pub(crate) struct BatchOps{
-    lsn: u64,
+    id: u64,
     ops: Vec<Ops>,
     undo: u64,
     checkpoint: u64,
