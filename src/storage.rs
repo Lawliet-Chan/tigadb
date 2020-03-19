@@ -202,7 +202,7 @@ pub(crate) struct KVpos {
 impl KVpos {
     pub(crate) fn encode(&self) -> Vec<u8> {
         let mut data = Vec::new();
-        let mut blocks_bytes = self.blocksencode(();
+        let mut blocks_bytes = self.blocks.encode();
         let value_pos_bytes = &mut u16_to_bytes(self.value_pos);
         let kv_size_bytes = &mut u16_to_bytes(self.kv_size);
         data.append(&mut blocks_bytes);
